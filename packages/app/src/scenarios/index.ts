@@ -87,4 +87,125 @@ export const SCENARIOS: Scenario[] = [
       { type: 'PATROL', callsign: 'REDCAP02', point1: { lat: 39.0, lon: 131.0 }, point2: { lat: 41.0, lon: 133.0 }, alt: 22000 },
     ],
   },
+  {
+    name: 'Stress Test: Pacific Theater',
+    description: '200+ aircraft, 30 radars/SAMs — full-scale Pacific air war stress test',
+    commands: () => {
+      const cmds: Command[] = [];
+
+      // === BLUE FORCE ===
+      // 4 Blue airbases
+      const blueBases = [
+        { callsign: 'KADENA', lat: 26.35, lon: 127.77 },
+        { callsign: 'MISAWA', lat: 40.7, lon: 141.4 },
+        { callsign: 'YOKOTA', lat: 35.75, lon: 139.35 },
+        { callsign: 'IWAKUNI', lat: 34.14, lon: 132.24 },
+      ];
+      for (const base of blueBases) {
+        cmds.push({ type: 'SPAWN', entityType: 'AIRBASE', callsign: base.callsign, lat: base.lat, lon: base.lon, side: 'blue' });
+      }
+
+      // Blue AWACS — 4 orbiting
+      for (let i = 0; i < 4; i++) {
+        cmds.push({ type: 'SPAWN', entityType: 'E-3', callsign: `SENTRY${String(i + 1).padStart(2, '0')}`, lat: 30 + i * 3, lon: 132 + i * 2, alt: 35000, side: 'blue', heading: 0, speed: 350 });
+      }
+
+      // Blue tankers — 4 orbiting
+      for (let i = 0; i < 4; i++) {
+        cmds.push({ type: 'SPAWN', entityType: 'KC-135', callsign: `TEXACO${String(i + 1).padStart(2, '0')}`, lat: 28 + i * 3, lon: 130 + i * 2, alt: 28000, side: 'blue', heading: 90, speed: 400 });
+      }
+
+      // Blue F-22A — 24 stealth fighters (6 flights x 4)
+      for (let f = 0; f < 6; f++) {
+        for (let w = 0; w < 4; w++) {
+          const n = f * 4 + w + 1;
+          cmds.push({ type: 'SPAWN', entityType: 'F-22A', callsign: `RAPT${String(n).padStart(2, '0')}`, lat: 28 + f * 2 + w * 0.15, lon: 129 + f * 1.5 + w * 0.15, alt: 32000 + w * 2000, side: 'blue', heading: 340 + f * 5, speed: 500 });
+        }
+      }
+
+      // Blue F-15C — 40 eagles (10 flights x 4)
+      for (let f = 0; f < 10; f++) {
+        for (let w = 0; w < 4; w++) {
+          const n = f * 4 + w + 1;
+          cmds.push({ type: 'SPAWN', entityType: 'F-15C', callsign: `EGL${String(n).padStart(3, '0')}`, lat: 27 + f * 1.2 + w * 0.12, lon: 128 + (f % 5) * 2 + w * 0.12, alt: 25000 + w * 1500 + f * 500, side: 'blue', heading: 350, speed: 450 });
+        }
+      }
+
+      // Blue F-16C — 20 vipers (5 flights x 4)
+      for (let f = 0; f < 5; f++) {
+        for (let w = 0; w < 4; w++) {
+          const n = f * 4 + w + 1;
+          cmds.push({ type: 'SPAWN', entityType: 'F-16C', callsign: `VPR${String(n).padStart(2, '0')}`, lat: 30 + f * 1.5 + w * 0.1, lon: 133 + f + w * 0.1, alt: 20000 + w * 2000, side: 'blue', heading: 0, speed: 480 });
+        }
+      }
+
+      // Blue PATRIOT batteries — 8
+      const bluePatriots = [
+        [26.5, 127.8], [35.7, 139.4], [40.7, 141.5], [34.2, 132.3],
+        [33.0, 130.5], [37.0, 136.5], [31.5, 131.0], [38.5, 140.0],
+      ];
+      for (let i = 0; i < bluePatriots.length; i++) {
+        cmds.push({ type: 'SPAWN', entityType: 'PATRIOT', callsign: `PAT${String(i + 1).padStart(2, '0')}`, lat: bluePatriots[i][0], lon: bluePatriots[i][1], side: 'blue' });
+      }
+
+      // Set up blue patrols for lead F-22s
+      for (let f = 0; f < 6; f++) {
+        const cs = `RAPT${String(f * 4 + 1).padStart(2, '0')}`;
+        cmds.push({ type: 'PATROL', callsign: cs, point1: { lat: 29 + f * 2, lon: 129 + f * 1.5 }, point2: { lat: 31 + f * 2, lon: 131 + f * 1.5 }, alt: 35000 });
+      }
+
+      // === RED FORCE ===
+      // 2 Red staging bases
+      cmds.push({ type: 'SPAWN', entityType: 'AIRBASE', callsign: 'VLADBASE', lat: 43.1, lon: 131.9, side: 'red' });
+      cmds.push({ type: 'SPAWN', entityType: 'AIRBASE', callsign: 'KHABAROV', lat: 48.5, lon: 135.2, side: 'red' });
+
+      // Red Su-30 strike waves — 60 aircraft (15 flights x 4)
+      for (let f = 0; f < 15; f++) {
+        for (let w = 0; w < 4; w++) {
+          const n = f * 4 + w + 1;
+          cmds.push({ type: 'SPAWN', entityType: 'Su-30', callsign: `FLK${String(n).padStart(3, '0')}`, lat: 43 + (f % 5) * 0.8 + w * 0.1, lon: 132 + Math.floor(f / 5) * 3 + w * 0.1, alt: 18000 + (f % 3) * 4000 + w * 1000, side: 'red', heading: 180 + (f % 5 - 2) * 10, speed: 520 });
+        }
+      }
+
+      // Red second wave — 40 more Su-30s (10 flights x 4)
+      for (let f = 0; f < 10; f++) {
+        for (let w = 0; w < 4; w++) {
+          const n = f * 4 + w + 1;
+          cmds.push({ type: 'SPAWN', entityType: 'Su-30', callsign: `RFX${String(n).padStart(3, '0')}`, lat: 44 + f * 0.5 + w * 0.08, lon: 134 + (f % 5) * 1.5 + w * 0.08, alt: 22000 + (f % 4) * 3000, side: 'red', heading: 190, speed: 500 });
+        }
+      }
+
+      // Red AWACS — 2
+      cmds.push({ type: 'SPAWN', entityType: 'E-3', callsign: 'REDSPY01', lat: 46.0, lon: 134.0, alt: 33000, side: 'red', heading: 180, speed: 350 });
+      cmds.push({ type: 'SPAWN', entityType: 'E-3', callsign: 'REDSPY02', lat: 47.0, lon: 137.0, alt: 35000, side: 'red', heading: 200, speed: 350 });
+
+      // Red SA-10 umbrella — 12 batteries
+      const redSAMs = [
+        [42.0, 131.0], [42.5, 133.0], [43.0, 135.0],
+        [43.5, 132.0], [44.0, 134.0], [44.5, 136.0],
+        [41.5, 130.5], [42.0, 132.5], [42.5, 134.5],
+        [43.0, 131.5], [43.5, 133.5], [44.0, 135.5],
+      ];
+      for (let i = 0; i < redSAMs.length; i++) {
+        cmds.push({ type: 'SPAWN', entityType: 'SA-10', callsign: `RSAM${String(i + 1).padStart(2, '0')}`, lat: redSAMs[i][0], lon: redSAMs[i][1], side: 'red' });
+      }
+
+      // Red SA-2 inner belt — 6 older systems
+      const redSA2s = [
+        [41.0, 130.0], [41.5, 132.0], [42.0, 134.0],
+        [42.5, 131.0], [43.0, 133.0], [43.5, 135.0],
+      ];
+      for (let i = 0; i < redSA2s.length; i++) {
+        cmds.push({ type: 'SPAWN', entityType: 'SA-2', callsign: `GDL${String(i + 1).padStart(2, '0')}`, lat: redSA2s[i][0], lon: redSA2s[i][1], side: 'red' });
+      }
+
+      // Red lead flights fly south toward blue forces
+      for (let f = 0; f < 15; f++) {
+        const cs = `FLK${String(f * 4 + 1).padStart(3, '0')}`;
+        cmds.push({ type: 'FLY_TO', callsign: cs, lat: 30 + (f % 5) * 2, lon: 130 + Math.floor(f / 5) * 3, alt: 20000 + (f % 3) * 4000, speed: 550 });
+      }
+
+      return cmds;
+    },
+  },
 ];

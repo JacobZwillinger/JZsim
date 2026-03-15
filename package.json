@@ -6,7 +6,9 @@
   ],
   "scripts": {
     "dev": "npm run dev -w packages/app",
-    "build": "npm run build -w packages/core && npm run build -w packages/engine && npm run build -w packages/command-parser && npm run build -w packages/app",
+    "server": "npm run start -w packages/server",
+    "server:dev": "npm run dev -w packages/server",
+    "build": "npm run build -w packages/core && npm run build -w packages/engine && npm run build -w packages/command-parser && npm run build -w packages/app && npm run build -w packages/server",
     "typecheck": "tsc --build",
     "test": "vitest run",
     "test:watch": "vitest"
