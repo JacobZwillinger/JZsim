@@ -1,0 +1,12 @@
+export { Simulation } from './simulation.js';
+export { World } from './ecs/world.js';
+export { ComponentStore } from './ecs/component-store.js';
+export { EntityAllocator } from './ecs/entity.js';
+export { CommandBus } from './commands/command-bus.js';
+export { SpatialGrid } from './spatial/grid-index.js';
+export { MovementSystem } from './systems/movement.js';
+export { FuelSystem } from './systems/fuel.js';
+export { RadarDetectionSystem } from './systems/radar-detection.js';
+export { syncWorldToBuffer, BUFFER_SIZE, HEADER_F64_COUNT, ENTITY_F64_STRIDE, MAX_SYNCED_ENTITIES } from './worker-bridge.js';
+export type { WorkerMessage } from './worker-bridge.js';
+export type { System } from './systems/types.js';

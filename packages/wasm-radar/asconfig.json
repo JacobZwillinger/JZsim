@@ -1,0 +1,16 @@
+{
+  "targets": {
+    "release": {
+      "outFile": "build/radar.wasm",
+      "textFile": "build/radar.wat",
+      "optimize": true,
+      "exportRuntime": true
+    },
+    "debug": {
+      "outFile": "build/radar.debug.wasm",
+      "textFile": "build/radar.debug.wat",
+      "debug": true
+    }
+  },
+  "options": {}
+}

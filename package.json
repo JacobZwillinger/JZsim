@@ -1,0 +1,17 @@
+{
+  "name": "jzsim",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w packages/app",
+    "build": "npm run build -w packages/core && npm run build -w packages/engine && npm run build -w packages/command-parser && npm run build -w packages/app",
+    "typecheck": "tsc --build",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.18"
+  }
+}
