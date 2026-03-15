@@ -8,8 +8,8 @@ const NAV_ITEMS: { tab: DrawerTab; icon: string; label: string }[] = [
   { tab: 'scenarios', icon: '📋', label: 'Scenarios' },
   { tab: 'radar',     icon: '📡', label: 'Radar' },
   { tab: 'missions',  icon: '✈',  label: 'Missions' },
-  { tab: 'aar',       icon: '📊', label: 'AAR' },
-  { tab: 'data',      icon: '⚙',  label: 'Data' },
+  { tab: 'aar',       icon: '📊', label: 'After Action Report' },
+  { tab: 'data',      icon: '⚙',  label: 'Parametric Data' },
 ];
 
 export function Toolbar() {
@@ -28,29 +28,37 @@ export function Toolbar() {
   };
 
   return (
-    <div style={{
-      position: 'absolute',
-      top: '12px',
-      left: '12px',
-      bottom: `${PANEL.STATUS_BAR_HEIGHT + 12}px`,
-      width: '44px',
-      display: 'flex',
-      flexDirection: 'column',
-      gap: '2px',
-      zIndex: 90,
-      backgroundColor: PANEL.BG,
-      backdropFilter: PANEL.BLUR,
-      WebkitBackdropFilter: PANEL.BLUR,
-      border: `1px solid ${PANEL.BORDER}`,
-      borderRadius: PANEL.RADIUS,
-      boxShadow: PANEL.SHADOW,
-      padding: '4px',
-    }}>
+    <nav
+      aria-label="Main navigation"
+      role="tablist"
+      aria-orientation="vertical"
+      style={{
+        position: 'absolute',
+        top: '12px',
+        left: '12px',
+        bottom: `${PANEL.STATUS_BAR_HEIGHT + 12}px`,
+        width: '44px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '2px',
+        zIndex: 90,
+        backgroundColor: PANEL.BG,
+        backdropFilter: PANEL.BLUR,
+        WebkitBackdropFilter: PANEL.BLUR,
+        border: `1px solid ${PANEL.BORDER}`,
+        borderRadius: PANEL.RADIUS,
+        boxShadow: PANEL.SHADOW,
+        padding: '4px',
+      }}
+    >
       {NAV_ITEMS.map(({ tab, icon, label }) => {
         const isActive = leftDrawerOpen && leftDrawerTab === tab;
         return (
           <button
             key={tab}
+            role="tab"
+            aria-selected={isActive}
+            aria-label={label}
             onClick={() => handleClick(tab)}
             title={label}
             style={{
@@ -69,12 +77,13 @@ export function Toolbar() {
               fontFamily: PANEL.FONT_MONO,
               padding: 0,
               transition: 'all 0.15s ease',
+              outline: 'none',
             }}
           >
             {icon}
           </button>
         );
       })}
-    </div>
+    </nav>
   );
 }

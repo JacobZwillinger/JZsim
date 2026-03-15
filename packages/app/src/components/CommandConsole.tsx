@@ -160,6 +160,9 @@ export function CommandConsole({ onCommand }: Props) {
       {/* Log output */}
       <div
         ref={logRef}
+        role="log"
+        aria-live="polite"
+        aria-label="Command output"
         style={{
           flex: 1,
           overflowY: 'auto',
@@ -196,6 +199,7 @@ export function CommandConsole({ onCommand }: Props) {
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Type a command (HELP for list)..."
+          aria-label="Command input"
           spellCheck={false}
           style={{
             flex: 1,
