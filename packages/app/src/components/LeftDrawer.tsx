@@ -7,6 +7,8 @@ import { RadarView } from './RadarView.js';
 import { AARPanel } from './AARPanel.js';
 import { MissionView } from './MissionView.js';
 import { ParametricEditor } from './ParametricEditor.js';
+import { PerformancePanel } from './PerformancePanel.js';
+import { StrikePanel } from './StrikePanel.js';
 import { ScenarioCreator } from './ScenarioCreator.js';
 import { useEntityFilter } from '../hooks/useEntityFilter.js';
 import { SCENARIOS, type Scenario } from '../scenarios/index.js';
@@ -77,6 +79,12 @@ export function LeftDrawer({ onLoadScenario, onCommand }: Props) {
           <ParametricEditor onUpdateDefaults={(aircraftKey, field, value) => {
             onCommand?.({ type: 'SET_DEFAULTS', aircraftKey, field, value });
           }} />
+        )}
+        {leftDrawerTab === 'perf' && (
+          <PerformancePanel />
+        )}
+        {leftDrawerTab === 'strike' && onCommand && (
+          <StrikePanel onCommand={onCommand} />
         )}
       </div>
     </div>

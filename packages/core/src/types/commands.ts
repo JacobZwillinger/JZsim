@@ -21,4 +21,9 @@ export type Command =
   | { type: 'LOAD_MUNS'; target: 'ALL_BASES' | string; level: 'STANDARD' | 'HIGH' | 'LOW'; weaponKey?: string; count?: number }
   | { type: 'ARM'; callsign: string; weaponKey?: string; count?: number }
   | { type: 'SET_DEFAULTS'; aircraftKey: string; field: string; value: number }
-  | { type: 'SEAD'; callsign: string; lat: number; lon: number };
+  | { type: 'SEAD'; callsign: string; lat: number; lon: number }
+  | { type: 'EQUIP'; callsign: string; podType: string }
+  | { type: 'JETTISON'; callsign: string; podType: string }
+  | { type: 'DMPI_ADD'; name: string; lat: number; lon: number; description?: string }
+  | { type: 'DMPI_REMOVE'; name: string }
+  | { type: 'STRIKE'; callsign: string; dmpiNames: string[]; weaponPerDmpi?: number };

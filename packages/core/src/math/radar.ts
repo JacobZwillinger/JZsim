@@ -56,6 +56,7 @@ export function computeEffectiveRCS(
   hasExternalFuelTanks: boolean,
   bayDoorsOpen: boolean,
   isStealth: boolean,
+  podsRcsM2: number = 0,
 ): number {
   let rcs = baseRCS;
 
@@ -64,6 +65,10 @@ export function computeEffectiveRCS(
     if (totalExternalStores > 0) {
       // Each external store adds ~0.5 m² and breaks stealth shaping
       rcs = Math.max(rcs, 0.1) + totalExternalStores * 0.5;
+    }
+    if (podsRcsM2 > 0) {
+      // External pods break stealth shaping
+      rcs = Math.max(rcs, 0.1) + podsRcsM2;
     }
     if (hasExternalFuelTanks) {
       // External tanks completely negate stealth
@@ -74,10 +79,11 @@ export function computeEffectiveRCS(
       rcs = Math.max(rcs, 0.1);
     }
   } else {
-    // Non-stealth aircraft: additive RCS from external stores
+    // Non-stealth aircraft: additive RCS from external stores and pods
     if (totalExternalStores > 0) {
       rcs += totalExternalStores * 0.3; // ~0.3 m² per pylon/rail
     }
+    rcs += podsRcsM2;
     if (hasExternalFuelTanks) {
       rcs *= 2.0; // Drop tanks roughly double RCS
     }

@@ -18,4 +18,9 @@ export type SimEvent =
   | { type: 'sim:tick'; simTime: number; tickCount: number; entityCount: number }
   | { type: 'muns:loaded'; baseCallsign: string; level: string }
   | { type: 'muns:armed'; callsign: string; weaponKey: string; count: number }
-  | { type: 'muns:returned'; callsign: string; baseCallsign: string; items: Record<string, number> };
+  | { type: 'muns:returned'; callsign: string; baseCallsign: string; items: Record<string, number> }
+  | { type: 'dmpi:added'; name: string; lat: number; lon: number; description?: string }
+  | { type: 'dmpi:removed'; name: string }
+  | { type: 'strike:assigned'; entityId: EntityId; callsign: string; dmpiNames: string[]; weaponPerDmpi: number }
+  | { type: 'strike:bomb_drop'; entityId: EntityId; callsign: string; dmpiName: string; weaponKey: string }
+  | { type: 'strike:route_complete'; entityId: EntityId; callsign: string };

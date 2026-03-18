@@ -8,18 +8,32 @@ import { RightDrawer } from './components/RightDrawer.js';
 import { useSimulation } from './hooks/useSimulation.js';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts.js';
 import { HelpPage } from './components/HelpPage.js';
+import { useUIStore } from './store/ui-store.js';
 import type { Scenario } from './scenarios/index.js';
 
 export function App() {
-  const { sendCommand, setPaused, setTimeMultiplier } = useSimulation();
+  const { sendCommand, setPaused, setTimeMultiplier, resetSim } = useSimulation();
   useKeyboardShortcuts();
 
   const loadScenario = useCallback((scenario: Scenario) => {
+    const entityCount = useUIStore.getState().entityCount;
+
+    if (entityCount > 0) {
+      const ok = window.confirm('Loading a new scenario will reset the current simulation. Continue?');
+      if (!ok) return;
+    }
+
+    // Reset sim state, then load scenario commands
+    resetSim();
+
     const commands = scenario.commands();
     for (const cmd of commands) {
       sendCommand(cmd);
     }
-  }, [sendCommand]);
+
+    // Start paused so user can review before pressing play
+    setPaused(true);
+  }, [sendCommand, resetSim, setPaused]);
 
   return (
     <div style={{
@@ -51,6 +65,7 @@ export function App() {
         onPauseToggle={setPaused}
         onTimeMultiplier={setTimeMultiplier}
         onLoadScenario={loadScenario}
+        onReset={resetSim}
       />
 
       {/* Help overlay */}

@@ -137,11 +137,15 @@ describe('EntityAllocator', () => {
     expect(alloc.activeCount).toBe(0);
   });
 
-  it('throws when capacity exceeded', () => {
+  it('auto-grows when capacity exceeded', () => {
     const alloc = new EntityAllocator(2);
     alloc.allocate('E1');
     alloc.allocate('E2');
-    expect(() => alloc.allocate('E3')).toThrow('Entity capacity exceeded');
+    // Should not throw — auto-grows
+    const id3 = alloc.allocate('E3');
+    expect(alloc.activeCount).toBe(3);
+    expect(alloc.capacity).toBeGreaterThanOrEqual(3);
+    expect(alloc.isAlive(id3)).toBe(true);
   });
 
   it('highWaterMark tracks maximum used index', () => {

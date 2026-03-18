@@ -79,7 +79,7 @@ interface UIState {
   // Layout state
   leftDrawerOpen: boolean;
   rightDrawerOpen: boolean;
-  leftDrawerTab: 'assets' | 'scenarios' | 'radar' | 'aar' | 'missions' | 'data';
+  leftDrawerTab: 'assets' | 'scenarios' | 'radar' | 'aar' | 'missions' | 'data' | 'perf' | 'strike';
   consoleOpen: boolean;
   searchQuery: string;
   helpOpen: boolean;
@@ -87,8 +87,29 @@ interface UIState {
   // AAR data
   aarData: AARData | null;
 
+  // DMPI / Strike data
+  dmpiTargets: Map<string, { lat: number; lon: number; description?: string }>;
+  strikeRoutes: Map<number, { dmpiNames: string[]; currentDmpiIdx: number; completedDmpis: string[] }>;
+
+  // Performance data (from extended tick_stats)
+  perfData: {
+    systemTimings: { name: string; ms: number }[];
+    gridRebuildMs: number;
+    bufferSyncMs: number;
+    radarContacts: number;
+    missileCount: number;
+    worldCapacity: number;
+  } | null;
+
   // Actions
-  setSimStats: (simTime: number, tickCount: number, entityCount: number, tickMs: number) => void;
+  setSimStats: (simTime: number, tickCount: number, entityCount: number, tickMs: number, perfData?: {
+    systemTimings: { name: string; ms: number }[];
+    gridRebuildMs: number;
+    bufferSyncMs: number;
+    radarContacts: number;
+    missileCount: number;
+    worldCapacity: number;
+  }) => void;
   setEntities: (entities: EntityInfo[]) => void;
   addEvents: (events: SimEvent[]) => void;
   addLogEntry: (time: number, message: string, type?: string) => void;
@@ -97,6 +118,7 @@ interface UIState {
   setTimeMultiplier: (multiplier: number) => void;
   setAARData: (data: AARData) => void;
   toggleHelp: () => void;
+  resetSimState: () => void;
 
   // Scenario creation
   customScenarios: Array<{ name: string; description: string; commands: import('@jzsim/core').Command[] }>;
@@ -111,7 +133,7 @@ interface UIState {
   // Layout actions
   toggleLeftDrawer: () => void;
   toggleRightDrawer: () => void;
-  setLeftDrawerTab: (tab: 'assets' | 'scenarios' | 'radar' | 'aar' | 'missions' | 'data') => void;
+  setLeftDrawerTab: (tab: 'assets' | 'scenarios' | 'radar' | 'aar' | 'missions' | 'data' | 'perf' | 'strike') => void;
   toggleConsole: () => void;
   setConsoleOpen: (open: boolean) => void;
   setSearchQuery: (query: string) => void;
@@ -135,7 +157,10 @@ export const useUIStore = create<UIState>((set, get) => ({
   eventLog: [],
   selectedEntityId: null,
   aarData: null,
+  perfData: null,
   helpOpen: false,
+  dmpiTargets: new Map(),
+  strikeRoutes: new Map(),
   customScenarios: (() => {
     try {
       const stored = localStorage.getItem('jzsim_scenarios');
@@ -152,8 +177,8 @@ export const useUIStore = create<UIState>((set, get) => ({
   consoleOpen: false,
   searchQuery: '',
 
-  setSimStats: (simTime, tickCount, entityCount, tickMs) =>
-    set({ simTime, tickCount, entityCount, tickMs }),
+  setSimStats: (simTime, tickCount, entityCount, tickMs, perfData) =>
+    set((s) => ({ simTime, tickCount, entityCount, tickMs, perfData: perfData ?? s.perfData })),
 
   setEntities: (entities) => set({ entities }),
 
@@ -163,6 +188,8 @@ export const useUIStore = create<UIState>((set, get) => ({
       const newMissionStates = new Map(state.missionStates);
       const newRadarEntities = new Map(state.radarEntities);
       const newRadarDetections = new Map(state.radarDetections);
+      const newDmpiTargets = new Map(state.dmpiTargets);
+      const newStrikeRoutes = new Map(state.strikeRoutes);
       const newEntries: Array<{ time: number; message: string; type?: string }> = [];
 
       for (const e of events) {
@@ -275,6 +302,49 @@ export const useUIStore = create<UIState>((set, get) => ({
             newEntries.push({ time: state.simTime, message: `${e.callsign} returned MUNS to ${e.baseCallsign}: ${items}`, type: 'mission' });
             break;
           }
+
+          case 'strike:assigned':
+            newStrikeRoutes.set(e.entityId as number, {
+              dmpiNames: e.dmpiNames,
+              currentDmpiIdx: 0,
+              completedDmpis: [],
+            });
+            break;
+
+          case 'dmpi:added':
+            newDmpiTargets.set(e.name, { lat: e.lat, lon: e.lon, description: e.description });
+            newEntries.push({ time: state.simTime, message: `DMPI "${e.name}" added at ${e.lat.toFixed(2)}, ${e.lon.toFixed(2)}`, type: 'cmd' });
+            break;
+
+          case 'dmpi:removed':
+            newDmpiTargets.delete(e.name);
+            newEntries.push({ time: state.simTime, message: `DMPI "${e.name}" removed`, type: 'cmd' });
+            break;
+
+          case 'strike:bomb_drop':
+            newEntries.push({ time: state.simTime, message: `${e.callsign} bombs on ${e.dmpiName} (${e.weaponKey})`, type: 'combat' });
+            // Update strike route progress
+            for (const [entIdx, route] of newStrikeRoutes) {
+              if (newCallsigns.get(entIdx) === e.callsign) {
+                if (!route.completedDmpis.includes(e.dmpiName)) {
+                  route.completedDmpis = [...route.completedDmpis, e.dmpiName];
+                  route.currentDmpiIdx = route.completedDmpis.length;
+                }
+                break;
+              }
+            }
+            break;
+
+          case 'strike:route_complete':
+            newEntries.push({ time: state.simTime, message: `${e.callsign} STRIKE complete — RTB`, type: 'mission' });
+            // Remove completed route
+            for (const [entIdx, _route] of newStrikeRoutes) {
+              if (newCallsigns.get(entIdx) === e.callsign) {
+                newStrikeRoutes.delete(entIdx);
+                break;
+              }
+            }
+            break;
         }
       }
 
@@ -283,6 +353,8 @@ export const useUIStore = create<UIState>((set, get) => ({
         missionStates: newMissionStates,
         radarEntities: newRadarEntities,
         radarDetections: newRadarDetections,
+        dmpiTargets: newDmpiTargets,
+        strikeRoutes: newStrikeRoutes,
         eventLog: [...state.eventLog, ...newEntries].slice(-MAX_LOG_ENTRIES),
       };
     }),
@@ -306,6 +378,25 @@ export const useUIStore = create<UIState>((set, get) => ({
   setConsoleOpen: (open) => set({ consoleOpen: open }),
   setSearchQuery: (query) => set({ searchQuery: query }),
   setAARData: (data) => set({ aarData: data }),
+  resetSimState: () => set({
+    simTime: 0,
+    tickCount: 0,
+    entityCount: 0,
+    tickMs: 0,
+    paused: true,
+    timeMultiplier: 1,
+    entities: [],
+    callsigns: new Map(),
+    missionStates: new Map(),
+    radarEntities: new Map(),
+    radarDetections: new Map(),
+    eventLog: [],
+    selectedEntityId: null,
+    aarData: null,
+    perfData: null,
+    dmpiTargets: new Map(),
+    strikeRoutes: new Map(),
+  }),
   toggleHelp: () => set((s) => ({ helpOpen: !s.helpOpen })),
   addCustomScenario: (name, description, commands) =>
     set((s) => {

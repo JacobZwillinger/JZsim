@@ -32,7 +32,7 @@ import type { World } from './ecs/world.js';
  */
 export const HEADER_F64_COUNT = 8;
 export const ENTITY_F64_STRIDE = 16;
-export const MAX_SYNCED_ENTITIES = 16384;
+export const MAX_SYNCED_ENTITIES = 32768;
 export const BUFFER_SIZE = (HEADER_F64_COUNT + ENTITY_F64_STRIDE * MAX_SYNCED_ENTITIES) * 8;
 
 /** Sync world state into a SharedArrayBuffer for the renderer to read */
@@ -82,7 +82,15 @@ export type WorkerMessage =
   | { type: 'command'; command: import('@jzsim/core').Command }
   | { type: 'set_time_multiplier'; multiplier: number }
   | { type: 'set_paused'; paused: boolean }
+  | { type: 'reset' }
   | { type: 'events'; events: import('@jzsim/core').SimEvent[] }
   | { type: 'ready' }
-  | { type: 'tick_stats'; simTime: number; tickCount: number; entityCount: number; tickMs: number }
+  | { type: 'tick_stats'; simTime: number; tickCount: number; entityCount: number; tickMs: number;
+      systemTimings?: { name: string; ms: number }[];
+      gridRebuildMs?: number;
+      bufferSyncMs?: number;
+      radarContacts?: number;
+      missileCount?: number;
+      worldCapacity?: number;
+    }
   | { type: 'aar_update'; data: import('./components/aar.js').AARSnapshot };

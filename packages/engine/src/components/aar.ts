@@ -91,6 +91,16 @@ export class AARStore {
     if (entry) entry.lost = true;
   }
 
+  reset(): void {
+    this.totalFuelUsedKg = 0;
+    this.munsExpended.clear();
+    this.targetsHit = 0;
+    this.enemiesEngaged = 0;
+    this.friendlyLosses = 0;
+    this.enemyLosses = 0;
+    this.perEntity.clear();
+  }
+
   /** Serialize for worker message transfer */
   snapshot(): AARSnapshot {
     const perEntity: AARSnapshot['perEntity'] = {};

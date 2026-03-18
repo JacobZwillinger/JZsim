@@ -37,6 +37,10 @@ export class BaseInventoryStore {
     }
   }
 
+  clear(): void {
+    this.data.clear();
+  }
+
   /** Find the base index that an aircraft is assigned to, or -1 */
   findBaseForAircraft(aircraftIdx: number): number {
     for (const [baseIdx, inv] of this.data) {

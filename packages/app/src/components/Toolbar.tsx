@@ -1,7 +1,7 @@
 import { useUIStore } from '../store/ui-store.js';
 import { PANEL } from '../styles/panel.js';
 
-type DrawerTab = 'assets' | 'scenarios' | 'radar' | 'missions' | 'aar' | 'data';
+type DrawerTab = 'assets' | 'scenarios' | 'radar' | 'missions' | 'aar' | 'data' | 'perf' | 'strike';
 
 const NAV_ITEMS: { tab: DrawerTab; icon: string; label: string }[] = [
   { tab: 'assets',    icon: '≡',  label: 'Order of Battle' },
@@ -9,7 +9,9 @@ const NAV_ITEMS: { tab: DrawerTab; icon: string; label: string }[] = [
   { tab: 'radar',     icon: '📡', label: 'Radar' },
   { tab: 'missions',  icon: '✈',  label: 'Missions' },
   { tab: 'aar',       icon: '📊', label: 'After Action Report' },
+  { tab: 'strike',    icon: '🎯', label: 'Strike / DMPI' },
   { tab: 'data',      icon: '⚙',  label: 'Parametric Data' },
+  { tab: 'perf',      icon: '⚡', label: 'System Health' },
 ];
 
 export function Toolbar() {

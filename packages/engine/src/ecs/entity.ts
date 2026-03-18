@@ -1,27 +1,52 @@
-import { EntityId, makeEntityId, entityIndex, entityGeneration, MAX_ENTITIES } from '@jzsim/core';
+import { EntityId, makeEntityId, entityIndex, entityGeneration } from '@jzsim/core';
 
 /**
- * Entity allocator with generational indices.
+ * Entity allocator with generational indices and auto-growth.
  *
  * Maintains a free list of available indices. When an entity is destroyed,
  * its index is recycled but the generation is incremented, so stale
  * EntityId references are detected.
+ *
+ * When capacity is exceeded, the allocator doubles its internal arrays.
  */
 export class EntityAllocator {
   private generations: Uint16Array;
   private freeList: number[];
   private nextFreshIndex: number;
   private _activeCount: number = 0;
+  private _capacity: number;
+
+  /** Callback invoked when capacity grows — World uses this to grow component stores */
+  onGrow?: (newCapacity: number) => void;
 
   /** Maps callsign -> EntityId for named lookup */
   readonly callsignMap: Map<string, EntityId> = new Map();
   /** Maps EntityId -> callsign */
   readonly idToCallsign: Map<EntityId, string> = new Map();
 
-  constructor(private readonly capacity: number = MAX_ENTITIES) {
-    this.generations = new Uint16Array(capacity);
+  constructor(initialCapacity: number = 4096) {
+    this._capacity = initialCapacity;
+    this.generations = new Uint16Array(initialCapacity);
     this.freeList = [];
     this.nextFreshIndex = 0;
+  }
+
+  get capacity(): number {
+    return this._capacity;
+  }
+
+  /** Grow to at least the given capacity */
+  private grow(minCapacity: number): void {
+    let newCap = this._capacity;
+    while (newCap < minCapacity) newCap *= 2;
+    if (newCap === this._capacity) return;
+
+    const newGens = new Uint16Array(newCap);
+    newGens.set(this.generations);
+    this.generations = newGens;
+    this._capacity = newCap;
+
+    this.onGrow?.(newCap);
   }
 
   /** Allocate a new entity, optionally with a callsign */
@@ -29,10 +54,11 @@ export class EntityAllocator {
     let index: number;
     if (this.freeList.length > 0) {
       index = this.freeList.pop()!;
-    } else if (this.nextFreshIndex < this.capacity) {
-      index = this.nextFreshIndex++;
     } else {
-      throw new Error('Entity capacity exceeded');
+      index = this.nextFreshIndex++;
+      if (index >= this._capacity) {
+        this.grow(index + 1);
+      }
     }
 
     const id = makeEntityId(index, this.generations[index]);
@@ -71,7 +97,7 @@ export class EntityAllocator {
   isAlive(id: EntityId): boolean {
     const index = entityIndex(id);
     const gen = entityGeneration(id);
-    return this.generations[index] === gen && index < this.nextFreshIndex;
+    return index < this._capacity && this.generations[index] === gen && index < this.nextFreshIndex;
   }
 
   /** Resolve a callsign to an EntityId, or null if not found */
@@ -88,6 +114,16 @@ export class EntityAllocator {
 
   get activeCount(): number {
     return this._activeCount;
+  }
+
+  /** Reset allocator to initial empty state */
+  reset(): void {
+    this.generations.fill(0);
+    this.freeList.length = 0;
+    this.nextFreshIndex = 0;
+    this._activeCount = 0;
+    this.callsignMap.clear();
+    this.idToCallsign.clear();
   }
 
   get highWaterMark(): number {

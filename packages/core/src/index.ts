@@ -4,6 +4,7 @@ export * from './types/entities.js';
 export * from './types/components.js';
 export * from './types/commands.js';
 export * from './types/events.js';
+export * from './types/dmpi.js';
 
 // Constants
 export * from './constants/physics.js';

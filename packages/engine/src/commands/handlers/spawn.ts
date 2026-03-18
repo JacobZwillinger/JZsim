@@ -84,6 +84,7 @@ export function handleSpawn(cmd: SpawnCommand, world: World): void {
         externalFuelTanks: false,
         bayDoorsOpenUntil: 0,
         offloadableFuel,
+        externalPods: [],
       });
     }
   } else if (cmd.entityType.toLowerCase() === 'base' || cmd.entityType.toLowerCase() === 'airbase') {

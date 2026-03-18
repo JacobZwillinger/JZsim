@@ -1,27 +1,25 @@
 import {
-  approxDistance, bearing, entityIndex,
+  bearing, entityIndex,
   Side, ModelType, getWeaponDefaults,
-  METERS_PER_DEGREE_LAT,
 } from '@jzsim/core';
 import type { System } from './types.js';
 import type { World } from '../ecs/world.js';
-import type { SpatialGrid } from '../spatial/grid-index.js';
 import { findCallsign } from '../util/callsign.js';
 
 /**
- * SAM engagement system: auto-fires at enemy aircraft in range.
+ * SAM engagement system: auto-fires at enemy aircraft detected by radar.
  *
  * Runs after RadarDetection. For each SAM site (has radar + samState):
  * 1. Tick reload timer
- * 2. Query spatial grid for aircraft in range
- * 3. Filter: enemy side only, not already engaged
+ * 2. Read radar contacts from world.radarContacts (populated by RadarDetection)
+ * 3. Filter: enemy side only, not already engaged, above altitude floor
  * 4. Fire missile at first valid target
+ *
+ * SAMs only engage targets their radar has detected — stealth aircraft
+ * with low RCS will not be detected at long range, so SAMs won't fire.
  */
 export class SamEngagementSystem implements System {
   private static readonly STAGGER_DIVISOR = 4;
-  private readonly candidateBuffer: number[] = [];
-
-  constructor(private readonly spatialGrid: SpatialGrid) {}
 
   update(world: World, dt: number): void {
     for (const [samIdx, samState] of world.samStates.entries()) {
@@ -43,17 +41,14 @@ export class SamEngagementSystem implements System {
         if (!world.position.has(tgt)) samState.engagedTargets.delete(tgt);
       }
 
-      const samLat = world.position.get(samIdx, 'lat');
-      const samLon = world.position.get(samIdx, 'lon');
-      const maxRange = world.radar.get(samIdx, 'maxRangeM');
       const samSide = world.allegiance.has(samIdx) ? world.allegiance.get(samIdx, 'side') : 0;
 
-      const maxRangeDeg = maxRange / METERS_PER_DEGREE_LAT;
-      this.spatialGrid.queryRadius(samLat, samLon, maxRangeDeg, this.candidateBuffer);
+      // Get targets detected by this SAM's radar this tick
+      const detectedTargets = world.radarContacts.get(samIdx);
+      if (!detectedTargets || detectedTargets.length === 0) continue;
 
-      for (const tgtIdx of this.candidateBuffer) {
+      for (const tgtIdx of detectedTargets) {
         if (!world.aircraft.has(tgtIdx)) continue;
-        if (tgtIdx === samIdx) continue;
         if (samState.engagedTargets.has(tgtIdx)) continue;
 
         // Only fire at enemies
@@ -63,12 +58,6 @@ export class SamEngagementSystem implements System {
         // Altitude floor check — SAMs can't track below minimum altitude (ground clutter)
         const tgtAlt = world.position.get(tgtIdx, 'alt');
         if (tgtAlt < samState.minEngageAltM) continue;
-
-        // Range check
-        const tgtLat = world.position.get(tgtIdx, 'lat');
-        const tgtLon = world.position.get(tgtIdx, 'lon');
-        const dist = approxDistance(samLat, samLon, tgtLat, tgtLon);
-        if (dist > maxRange) continue;
 
         // FIRE
         this.launchMissile(world, samIdx, tgtIdx, samState);

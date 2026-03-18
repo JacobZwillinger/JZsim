@@ -6,7 +6,13 @@
 - [ ] **Time-of-Day / Lighting** — Day/night cycle affecting visual acquisition, IR sensor effectiveness
 - [ ] **Entity Trail Lines** — Breadcrumb paths on map showing entity history
 - [ ] **Combat Replay** — Record/playback of simulation sessions for AAR review
-- [ ] **Performance Profiling Dashboard** — Real-time metrics: tick time, entity count, system budgets
+- [x] **Performance Profiling Dashboard** — Real-time metrics: tick time, entity count, system budgets (⚡ System Health panel)
+- [x] **DMPI Bombing Run** — Strike mission system: DMPI target management, STRIKE command, route detail panel with distances/reorder/optimization, map visualization (🎯 Strike/DMPI panel)
+
+## UI Backlog
+
+- [ ] **Configurable Data Drawer** — Rename "Parametric Data" to a generic "Configuration" drawer; add weapon defaults and RCS behavior as editable tables alongside existing aircraft defaults
+- [ ] **Map Click Closes Drawer** — Clicking on the map should close the left drawer if open
 
 ## Sim-Ism Backlog (Codebase Audit Findings)
 
@@ -24,6 +30,7 @@
 - [ ] No afterburner modeling (5–10× burn rate increase at military/max power)
 
 ### Engagement (MEDIUM priority)
+- [ ] Scenarios don't issue ENGAGE commands — fighters only auto-engage when explicitly told; consider auto-engagement for aircraft on PATROL that detect hostiles
 - [ ] 150 km auto-engage range too large — should depend on sensor (radar RCS, AWACS data link)
 - [ ] No weapons envelope constraints (aspect angle, closure rate, Rne/Rtr)
 - [ ] Instant heading change during engagement — should be limited by turn rate/G
@@ -42,6 +49,14 @@
 - [ ] Detection threshold 50% too high (should be 10–15% for initial detection)
 - [ ] No frequency/polarization atmospheric absorption effects
 - [ ] Fixed Smin constant — should vary by receiver design
+
+### Strike / DMPI (LOW priority)
+- [ ] Bombs always hit target — no CEP (Circular Error Probable) miss modeling for JDAMs
+- [ ] No bomb flight time delay — bombs "hit" instantly on drop (should take ~30-90 sec to glide to target)
+- [ ] No bomb damage area — single-target damage only, no splash/blast radius
+- [ ] 1 km drop distance is unrealistic — real JDAM release at 15-25 km (high-altitude toss/CCRP)
+- [ ] No BDA (Battle Damage Assessment) — can't tell if target was actually destroyed
+- [ ] Strike route optimization is nearest-neighbor greedy — should offer 2-opt or full TSP for better routes
 
 ### Mission (LOW priority)
 - [ ] 1 km waypoint arrival radius too tight for some scenarios

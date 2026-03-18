@@ -128,6 +128,8 @@ export const WEAPON_DEFAULTS: Record<string, {
   'AIM-9':   { speedMach: 2.5, maxRangeKm: 35, flightTimeSec: 30, damage: 0.6, hitProbability: 0.65, weaponType: 2 },
   'SA-10':   { speedMach: 6, maxRangeKm: 200, flightTimeSec: 50, damage: 1.5, hitProbability: 0.80, weaponType: 10 },
   'SA-2':    { speedMach: 3.5, maxRangeKm: 50, flightTimeSec: 30, damage: 1.2, hitProbability: 0.50, weaponType: 11 },
+  'GBU-31':  { speedMach: 0.9, maxRangeKm: 28, flightTimeSec: 90, damage: 3.0, hitProbability: 0.90, weaponType: 20 },
+  'GBU-38':  { speedMach: 0.9, maxRangeKm: 28, flightTimeSec: 90, damage: 2.0, hitProbability: 0.85, weaponType: 21 },
 };
 
 export function getWeaponDefaults(weaponName: string) {
@@ -167,7 +169,7 @@ export const LOADOUT_DEFAULTS: Record<string, {
   'F-22A':  { primaryWeapon: 'AIM-120', primaryAmmo: 6, secondaryWeapon: 'AIM-9', secondaryAmmo: 2 },
   'F-16C':  { primaryWeapon: 'AIM-120', primaryAmmo: 2, secondaryWeapon: 'AIM-9', secondaryAmmo: 4 },
   'Su-30':  { primaryWeapon: 'AIM-120', primaryAmmo: 4, secondaryWeapon: 'AIM-9', secondaryAmmo: 4 },
-  'B-2A':   { primaryWeapon: 'AIM-120', primaryAmmo: 0, secondaryWeapon: 'AIM-9', secondaryAmmo: 0 },
+  'B-2A':   { primaryWeapon: 'GBU-31', primaryAmmo: 16, secondaryWeapon: 'GBU-38', secondaryAmmo: 0 },
   'KC-135': { primaryWeapon: 'AIM-120', primaryAmmo: 0, secondaryWeapon: 'AIM-9', secondaryAmmo: 0 },
   'E-3':    { primaryWeapon: 'AIM-120', primaryAmmo: 0, secondaryWeapon: 'AIM-9', secondaryAmmo: 0 },
 };
@@ -220,4 +222,12 @@ export const RADAR_DEFAULTS: Record<string, {
     freqGhz: 4.0,
     maxRangeKm: 300,
   },
+};
+
+/** External pod/store definitions with RCS contributions */
+export const POD_DEFAULTS: Record<string, { rcsM2: number; description: string }> = {
+  'ECM':       { rcsM2: 0.2,  description: 'Electronic countermeasures pod' },
+  'TGP':       { rcsM2: 0.15, description: 'Targeting pod (Sniper/LANTIRN)' },
+  'RECON':     { rcsM2: 0.25, description: 'Reconnaissance pod' },
+  'FUEL_TANK': { rcsM2: 0.4,  description: 'External drop tank' },
 };

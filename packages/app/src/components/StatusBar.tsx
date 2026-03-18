@@ -9,9 +9,10 @@ interface Props {
   onPauseToggle: (paused: boolean) => void;
   onTimeMultiplier: (multiplier: number) => void;
   onLoadScenario: (scenario: Scenario) => void;
+  onReset: () => void;
 }
 
-export function StatusBar({ onPauseToggle, onTimeMultiplier, onLoadScenario }: Props) {
+export function StatusBar({ onPauseToggle, onTimeMultiplier, onLoadScenario, onReset }: Props) {
   const simTime = useUIStore((s) => s.simTime);
   const entityCount = useUIStore((s) => s.entityCount);
   const tickMs = useUIStore((s) => s.tickMs);
@@ -80,6 +81,20 @@ export function StatusBar({ onPauseToggle, onTimeMultiplier, onLoadScenario }: P
         ariaLabel={paused ? 'Resume simulation' : 'Pause simulation'}
       >
         {paused ? '▶' : '⏸'}
+      </SBarButton>
+
+      {/* Reset */}
+      <SBarButton
+        onClick={() => {
+          if (entityCount > 0) {
+            const ok = window.confirm('Reset will clear all entities and the simulation clock. Continue?');
+            if (!ok) return;
+          }
+          onReset();
+        }}
+        ariaLabel="Reset simulation"
+      >
+        ↺
       </SBarButton>
 
       {/* Time multiplier buttons */}

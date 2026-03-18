@@ -46,6 +46,9 @@ export class MissionSystem implements System {
         case MissionState.SEAD:
           this.tickSead(world, idx, dt);
           break;
+        case MissionState.STRIKE:
+          this.tickStrike(world, idx, dt);
+          break;
         case MissionState.REFUELING:
           this.tickRefueling(world, idx, dt);
           break;
@@ -331,6 +334,149 @@ export class MissionSystem implements System {
       success: true,
       message: `${shooterCallsign} SEAD: launched ${weaponKey} at ${targetCallsign}`,
     });
+  }
+
+  /**
+   * STRIKE tick: fly ordered DMPI route, drop ordnance at each target, RTB when done.
+   */
+  private tickStrike(world: World, idx: number, dt: number): void {
+    const route = world.strikes.get(idx);
+    if (!route) {
+      this.transitionState(world, idx, MissionState.IDLE);
+      return;
+    }
+
+    // Route complete?
+    if (route.currentDmpiIdx >= route.dmpiNames.length) {
+      const callsign = findCallsign(world, idx);
+      world.emit({ type: 'strike:route_complete', entityId: idx, callsign });
+      world.emit({
+        type: 'command:executed', command: 'STRIKE', success: true,
+        message: `${callsign} STRIKE complete — all ${route.dmpiNames.length} DMPIs hit, RTB`,
+      });
+      this.transitionState(world, idx, MissionState.RTB);
+      return;
+    }
+
+    // Check ammo
+    const loadout = world.loadouts.get(idx);
+    const totalAmmo = loadout ? loadout.primaryAmmo + loadout.secondaryAmmo : 0;
+    if (totalAmmo <= 0) {
+      const callsign = findCallsign(world, idx);
+      world.emit({
+        type: 'command:executed', command: 'STRIKE', success: true,
+        message: `${callsign} STRIKE — WINCHESTER after ${route.completedDmpis.length}/${route.dmpiNames.length} DMPIs, RTB`,
+      });
+      this.transitionState(world, idx, MissionState.RTB);
+      return;
+    }
+
+    // Resolve current DMPI
+    const dmpiName = route.dmpiNames[route.currentDmpiIdx];
+    const dmpi = world.dmpis.get(dmpiName);
+    if (!dmpi) {
+      // DMPI was removed — skip to next
+      route.currentDmpiIdx++;
+      return;
+    }
+
+    const lat = world.position.get(idx, 'lat');
+    const lon = world.position.get(idx, 'lon');
+    const dist = approxDistance(lat, lon, dmpi.lat, dmpi.lon);
+
+    if (dist > WAYPOINT_ARRIVAL_RADIUS_M) {
+      // Steer toward current DMPI at cruise speed
+      const hdg = bearing(lat, lon, dmpi.lat, dmpi.lon);
+      world.position.fields.get('heading')![idx] = hdg;
+      if (world.aircraft.has(idx) && world.velocity.has(idx)) {
+        world.velocity.fields.get('speed')![idx] = world.aircraft.get(idx, 'cruiseSpeed');
+      }
+      return;
+    }
+
+    // Arrived at DMPI — drop ordnance
+    const callsign = findCallsign(world, idx);
+    for (let b = 0; b < route.weaponPerDmpi; b++) {
+      if (!this.dropBomb(world, idx, dmpi, callsign)) break; // out of ammo
+    }
+
+    route.completedDmpis.push(dmpiName);
+    route.currentDmpiIdx++;
+
+    world.emit({
+      type: 'command:executed', command: 'STRIKE', success: true,
+      message: `${callsign} STRIKE: bombs on ${dmpiName} (${route.completedDmpis.length}/${route.dmpiNames.length})`,
+    });
+  }
+
+  /** Drop a single bomb at a DMPI target. Returns false if out of ammo. */
+  private dropBomb(world: World, shooterIdx: number, dmpi: { lat: number; lon: number; name: string }, shooterCallsign: string): boolean {
+    const loadout = world.loadouts.get(shooterIdx);
+    if (!loadout) return false;
+
+    let weaponKey = '';
+    if (loadout.primaryAmmo > 0) {
+      weaponKey = loadout.primaryWeapon;
+      loadout.primaryAmmo--;
+    } else if (loadout.secondaryAmmo > 0) {
+      weaponKey = loadout.secondaryWeapon;
+      loadout.secondaryAmmo--;
+    } else {
+      return false;
+    }
+
+    const wep = getWeaponDefaults(weaponKey);
+    if (!wep) return false;
+
+    const bombCallsign = `BOM-${shooterCallsign}-${world.tickCount}-${dmpi.name}`;
+    const bombId = world.entities.allocate(bombCallsign);
+    const bIdx = entityIndex(bombId);
+
+    const sLat = world.position.get(shooterIdx, 'lat');
+    const sLon = world.position.get(shooterIdx, 'lon');
+    const sAlt = world.position.get(shooterIdx, 'alt');
+    const hdg = bearing(sLat, sLon, dmpi.lat, dmpi.lon);
+
+    world.position.set(bIdx, { lat: sLat, lon: sLon, alt: sAlt, heading: hdg, pitch: 0, roll: 0 });
+    world.velocity.set(bIdx, { speed: wep.speed, climbRate: -50, turnRate: 0 });
+
+    // Bomb targets ground position — use a dummy target index of -1 and let flight timer handle impact
+    world.weapon.set(bIdx, {
+      targetIdx: -1,
+      shooterIdx,
+      weaponType: wep.weaponType,
+      damage: wep.damage,
+      hitProbability: wep.hitProbability,
+      maxRange: wep.maxRange,
+      flightTimeLeft: wep.flightTime,
+      missileSpeed: wep.speed,
+      prevLosAngle: hdg,
+    });
+
+    const shooterSide = world.allegiance.has(shooterIdx) ? world.allegiance.get(shooterIdx, 'side') : Side.BLUE;
+    world.allegiance.set(bIdx, { side: shooterSide, iffCode: 0 });
+    world.renderable.set(bIdx, {
+      modelType: ModelType.MISSILE,
+      iconId: 0,
+      colorR: shooterSide === Side.BLUE ? 0.27 : 1,
+      colorG: 0.27,
+      colorB: shooterSide === Side.BLUE ? 1 : 0.27,
+      visible: 1,
+    });
+
+    // Bay door timer for stealth aircraft
+    if (loadout) {
+      loadout.bayDoorsOpenUntil = world.simTime + 5;
+    }
+
+    // AAR tracking
+    world.aar.getOrCreateEntity(shooterIdx, shooterCallsign, 'bomber', shooterSide, '');
+    world.aar.recordMunsExpended(shooterIdx, weaponKey, 1);
+
+    world.emit({ type: 'entity:spawned', entityId: bIdx, callsign: bombCallsign, entityType: 'bomb' });
+    world.emit({ type: 'strike:bomb_drop', entityId: shooterIdx, callsign: shooterCallsign, dmpiName: dmpi.name, weaponKey });
+
+    return true;
   }
 
   /**

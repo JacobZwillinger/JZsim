@@ -24,5 +24,9 @@ self.onmessage = (e: MessageEvent<WorkerMessage>) => {
     case 'set_paused':
       sim.world.paused = msg.paused;
       break;
+
+    case 'reset':
+      sim.reset();
+      break;
   }
 };

@@ -37,6 +37,10 @@ export function parseCommand(input: string): Command | null {
     case 'ARM': return parseArm(tokens);
     case 'SEAD': return parseSead(tokens);
     case 'REFUEL': return parseRefuel(tokens);
+    case 'EQUIP': return parseEquip(tokens);
+    case 'JETTISON': return parseJettison(tokens);
+    case 'DMPI': return parseDmpi(tokens);
+    case 'STRIKE': return parseStrike(tokens);
     default: return null;
   }
 }
@@ -306,6 +310,66 @@ function parseRefuel(tokens: string[]): Command | null {
   return { type: 'REFUEL', callsign, at };
 }
 
+function parseEquip(tokens: string[]): Command | null {
+  // EQUIP <callsign> <pod_type>
+  if (tokens.length < 3) return null;
+  return { type: 'EQUIP', callsign: tokens[1], podType: tokens[2].toUpperCase() };
+}
+
+function parseJettison(tokens: string[]): Command | null {
+  // JETTISON <callsign> <pod_type>
+  if (tokens.length < 3) return null;
+  return { type: 'JETTISON', callsign: tokens[1], podType: tokens[2].toUpperCase() };
+}
+
+function parseDmpi(tokens: string[]): Command | null {
+  // DMPI ADD <name> AT <lat> <lon> [DESC <description...>]
+  // DMPI REMOVE <name>
+  if (tokens.length < 3) return null;
+  const subCmd = tokens[1].toUpperCase();
+
+  if (subCmd === 'ADD') {
+    if (tokens.length < 6) return null;
+    const name = tokens[2].toUpperCase();
+    const atIdx = tokens.findIndex((t, i) => i > 2 && t.toUpperCase() === 'AT');
+    if (atIdx < 0 || atIdx + 2 >= tokens.length) return null;
+    const lat = parseFloat(tokens[atIdx + 1]);
+    const lon = parseFloat(tokens[atIdx + 2]);
+    if (isNaN(lat) || isNaN(lon)) return null;
+    const descIdx = tokens.findIndex((t, i) => i > atIdx + 2 && t.toUpperCase() === 'DESC');
+    const description = descIdx >= 0 ? tokens.slice(descIdx + 1).join(' ') : undefined;
+    return { type: 'DMPI_ADD', name, lat, lon, description };
+  }
+
+  if (subCmd === 'REMOVE' || subCmd === 'DELETE') {
+    if (tokens.length < 3) return null;
+    return { type: 'DMPI_REMOVE', name: tokens[2].toUpperCase() };
+  }
+
+  return null;
+}
+
+function parseStrike(tokens: string[]): Command | null {
+  // STRIKE <callsign> TARGETS <dmpi1> <dmpi2> ... [WEAPONS <count>]
+  if (tokens.length < 4) return null;
+  const callsign = tokens[1];
+  const tgtIdx = tokens.findIndex((t, i) => i > 1 && t.toUpperCase() === 'TARGETS');
+  if (tgtIdx < 0) return null;
+
+  const weaponsIdx = tokens.findIndex((t, i) => i > tgtIdx && t.toUpperCase() === 'WEAPONS');
+  const endIdx = weaponsIdx >= 0 ? weaponsIdx : tokens.length;
+  const dmpiNames = tokens.slice(tgtIdx + 1, endIdx).map(n => n.toUpperCase());
+  if (dmpiNames.length === 0) return null;
+
+  let weaponPerDmpi: number | undefined;
+  if (weaponsIdx >= 0 && weaponsIdx + 1 < tokens.length) {
+    weaponPerDmpi = parseInt(tokens[weaponsIdx + 1]);
+    if (isNaN(weaponPerDmpi)) weaponPerDmpi = undefined;
+  }
+
+  return { type: 'STRIKE', callsign, dmpiNames, weaponPerDmpi };
+}
+
 /** Get list of available command keywords for autocomplete */
 export function getCommandKeywords(): string[] {
   return [
@@ -313,7 +377,8 @@ export function getCommandKeywords(): string[] {
     'SCRAMBLE', 'RTB', 'ATTACK', 'RADAR', 'PATROL',
     'ENGAGE', 'DISENGAGE', 'INTERCEPT',
     'ASSIGN', 'LOAD', 'ARM',
-    'SEAD', 'REFUEL',
+    'SEAD', 'REFUEL', 'EQUIP', 'JETTISON',
+    'DMPI', 'STRIKE',
   ];
 }
 
@@ -338,6 +403,10 @@ export function getCommandHelp(keyword: string): string | null {
     'ARM': 'ARM <callsign> [WITH <weapon> <count>] — arm aircraft from base inventory',
     'SEAD': 'SEAD <callsign> AT <lat> <lon> — suppress enemy air defenses in area',
     'REFUEL': 'REFUEL <callsign> AT <tanker_callsign> — fly to tanker and refuel',
+    'EQUIP': 'EQUIP <callsign> <pod_type> — attach external pod (ECM, TGP, RECON, FUEL_TANK)',
+    'JETTISON': 'JETTISON <callsign> <pod_type> — jettison external pod',
+    'DMPI': 'DMPI ADD <name> AT <lat> <lon> [DESC <text>] | DMPI REMOVE <name>',
+    'STRIKE': 'STRIKE <callsign> TARGETS <dmpi1> [dmpi2...] [WEAPONS <count_per_dmpi>]',
   };
   return help[keyword.toUpperCase()] ?? null;
 }

@@ -74,6 +74,7 @@ function armSpecific(
       externalFuelTanks: false,
       bayDoorsOpenUntil: 0,
       offloadableFuel: -1,
+      externalPods: [],
     });
   }
 

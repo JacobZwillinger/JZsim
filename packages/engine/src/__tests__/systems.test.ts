@@ -15,6 +15,7 @@ import {
   computeEffectiveRCS,
 } from '@jzsim/core';
 import { batchRadarCheck } from '@jzsim/wasm-radar';
+import { CommandBus } from '../commands/command-bus.js';
 
 /** Helper: create a world + spatial grid for testing */
 function createTestWorld() {
@@ -387,6 +388,187 @@ describe('WeaponSystem', () => {
 });
 
 // ============================================================
+// Combat Damage & Swept-Segment Hit Detection Tests
+// ============================================================
+describe('Aircraft damage and missile hit detection', () => {
+  let world: World;
+  let system: WeaponSystem;
+  let movementSystem: MovementSystem;
+
+  beforeEach(() => {
+    world = new World(256);
+    system = new WeaponSystem();
+    movementSystem = new MovementSystem();
+  });
+
+  it('should detect hit when high-speed missile overshoots target between ticks', () => {
+    // Target sitting at 26.01°N — missile starts just south at 26.0°N heading north
+    // At Mach 4 (1372 m/s), missile travels 1372m in 1 tick — ~0.0123° lat
+    // Target is ~1111m (0.01°) away — missile will overshoot past it in one tick
+    const targetIdx = spawnFighter(world, 'TGT01', 26.01, 128.0, 8000, Side.RED);
+
+    const mslId = world.entities.allocate('MSL01');
+    const mslIdx = entityIndex(mslId);
+    world.position.set(mslIdx, { lat: 26.0, lon: 128.0, alt: 8000, heading: 0, pitch: 0, roll: 0 });
+    world.velocity.set(mslIdx, { speed: 1372, climbRate: 0, turnRate: 0 });
+    world.weapon.set(mslIdx, {
+      targetIdx,
+      shooterIdx: 0,
+      weaponType: 1,
+      damage: 1.0,
+      hitProbability: 1.0, // guaranteed hit
+      maxRange: 180_000,
+      flightTimeLeft: 60,
+      missileSpeed: 1372,
+      prevLosAngle: 0,
+    });
+
+    // First move the missile (simulating MovementSystem running before WeaponSystem)
+    movementSystem.update(world, 1.0);
+    // Now the missile has moved ~1372m north past the target
+
+    // WeaponSystem should detect hit via swept-segment closest approach
+    system.update(world, 1.0);
+
+    const events = world.drainEvents();
+    const impacts = events.filter((e) => e.type === 'weapon:impact');
+    expect(impacts.length).toBe(1);
+    expect((impacts[0] as any).hit).toBe(true);
+  });
+
+  it('should destroy aircraft when HP reaches zero', () => {
+    const targetIdx = spawnFighter(world, 'FLANKER01', 26.0, 128.0, 8000, Side.RED);
+    expect(world.health.get(targetIdx, 'currentHealth')).toBe(100);
+
+    // Place missile directly on target (zero distance)
+    const mslId = world.entities.allocate('MSL01');
+    const mslIdx = entityIndex(mslId);
+    world.position.set(mslIdx, { lat: 26.0, lon: 128.0, alt: 8000, heading: 0, pitch: 0, roll: 0 });
+    world.velocity.set(mslIdx, { speed: 1372, climbRate: 0, turnRate: 0 });
+    world.weapon.set(mslIdx, {
+      targetIdx,
+      shooterIdx: 0,
+      weaponType: 1,
+      damage: 2.0, // 60 * 2.0 = 120 damage — enough to kill from 100 HP
+      hitProbability: 1.0,
+      maxRange: 180_000,
+      flightTimeLeft: 60,
+      missileSpeed: 1372,
+      prevLosAngle: 0,
+    });
+
+    system.update(world, 1.0);
+
+    const events = world.drainEvents();
+    const destroyEvents = events.filter((e) => e.type === 'entity:destroyed');
+    expect(destroyEvents.length).toBe(1);
+    expect((destroyEvents[0] as any).callsign).toBe('FLANKER01');
+
+    // Target should be removed from the world
+    expect(world.position.has(targetIdx)).toBe(false);
+  });
+
+  it('should reduce aircraft HP without destroying when damage is partial', () => {
+    const targetIdx = spawnFighter(world, 'FLANKER01', 26.0, 128.0, 8000, Side.RED);
+
+    const mslId = world.entities.allocate('MSL01');
+    const mslIdx = entityIndex(mslId);
+    world.position.set(mslIdx, { lat: 26.0, lon: 128.0, alt: 8000, heading: 0, pitch: 0, roll: 0 });
+    world.velocity.set(mslIdx, { speed: 1372, climbRate: 0, turnRate: 0 });
+    world.weapon.set(mslIdx, {
+      targetIdx,
+      shooterIdx: 0,
+      weaponType: 1,
+      damage: 0.5, // 60 * 0.5 = 30 damage — leaves 70 HP
+      hitProbability: 1.0,
+      maxRange: 180_000,
+      flightTimeLeft: 60,
+      missileSpeed: 1372,
+      prevLosAngle: 0,
+    });
+
+    system.update(world, 1.0);
+
+    // Target should still exist with reduced HP
+    expect(world.position.has(targetIdx)).toBe(true);
+    const hp = world.health.get(targetIdx, 'currentHealth');
+    expect(hp).toBe(70); // 100 - 30
+
+    const events = world.drainEvents();
+    const damageEvents = events.filter((e) => e.type === 'entity:damaged');
+    expect(damageEvents.length).toBe(1);
+    expect((damageEvents[0] as any).healthPercent).toBe(70);
+  });
+
+  it('should track kills in AAR when aircraft is destroyed', () => {
+    const shooterIdx = spawnFighter(world, 'EAGLE01', 25.5, 128.0, 8000, Side.BLUE);
+    const targetIdx = spawnFighter(world, 'FLANKER01', 26.0, 128.0, 8000, Side.RED);
+
+    // Register shooter in AAR
+    world.aar.getOrCreateEntity(shooterIdx, 'EAGLE01', 'F-15C', Side.BLUE, 'KADENA');
+
+    const mslId = world.entities.allocate('MSL01');
+    const mslIdx = entityIndex(mslId);
+    world.position.set(mslIdx, { lat: 26.0, lon: 128.0, alt: 8000, heading: 0, pitch: 0, roll: 0 });
+    world.velocity.set(mslIdx, { speed: 1372, climbRate: 0, turnRate: 0 });
+    world.weapon.set(mslIdx, {
+      targetIdx,
+      shooterIdx,
+      weaponType: 1,
+      damage: 2.0, // lethal
+      hitProbability: 1.0,
+      maxRange: 180_000,
+      flightTimeLeft: 60,
+      missileSpeed: 1372,
+      prevLosAngle: 0,
+    });
+
+    system.update(world, 1.0);
+
+    // AAR should record the kill
+    expect(world.aar.targetsHit).toBe(1);
+    expect(world.aar.enemyLosses).toBe(1);
+    const shooterAAR = world.aar.getEntity(shooterIdx);
+    expect(shooterAAR?.kills).toBe(1);
+  });
+
+  it('should record enemy loss for red side and friendly loss for blue side', () => {
+    // Red target destroyed
+    const redIdx = spawnFighter(world, 'RED01', 26.0, 128.0, 8000, Side.RED);
+    const mslId1 = world.entities.allocate('MSL01');
+    const mslIdx1 = entityIndex(mslId1);
+    world.position.set(mslIdx1, { lat: 26.0, lon: 128.0, alt: 8000, heading: 0, pitch: 0, roll: 0 });
+    world.velocity.set(mslIdx1, { speed: 1372, climbRate: 0, turnRate: 0 });
+    world.weapon.set(mslIdx1, {
+      targetIdx: redIdx, shooterIdx: 0, weaponType: 1,
+      damage: 2.0, hitProbability: 1.0, maxRange: 180_000,
+      flightTimeLeft: 60, missileSpeed: 1372, prevLosAngle: 0,
+    });
+
+    system.update(world, 1.0);
+    expect(world.aar.enemyLosses).toBe(1);
+    expect(world.aar.friendlyLosses).toBe(0);
+
+    // Blue target destroyed
+    const blueIdx = spawnFighter(world, 'BLUE01', 27.0, 128.0, 8000, Side.BLUE);
+    const mslId2 = world.entities.allocate('MSL02');
+    const mslIdx2 = entityIndex(mslId2);
+    world.position.set(mslIdx2, { lat: 27.0, lon: 128.0, alt: 8000, heading: 0, pitch: 0, roll: 0 });
+    world.velocity.set(mslIdx2, { speed: 1372, climbRate: 0, turnRate: 0 });
+    world.weapon.set(mslIdx2, {
+      targetIdx: blueIdx, shooterIdx: 0, weaponType: 1,
+      damage: 2.0, hitProbability: 1.0, maxRange: 180_000,
+      flightTimeLeft: 60, missileSpeed: 1372, prevLosAngle: 0,
+    });
+
+    system.update(world, 1.0);
+    // Cumulative: 1 enemy + 1 friendly
+    expect(world.aar.enemyLosses).toBe(1);
+    expect(world.aar.friendlyLosses).toBe(1);
+  });
+});
+
+// ============================================================
 // Mission System Tests
 // ============================================================
 describe('MissionSystem', () => {
@@ -709,6 +891,7 @@ describe('LoadoutStore', () => {
       externalFuelTanks: false,
       bayDoorsOpenUntil: 0,
       offloadableFuel: -1,
+      externalPods: [],
     });
 
     const loadout = world.loadouts.get(idx);
@@ -732,6 +915,7 @@ describe('LoadoutStore', () => {
       externalFuelTanks: false,
       bayDoorsOpenUntil: 0,
       offloadableFuel: -1,
+      externalPods: [],
     });
 
     const loadout = world.loadouts.get(idx)!;
@@ -888,7 +1072,8 @@ describe('PN Missile Guidance', () => {
 describe('SAM Altitude Floor', () => {
   it('should not engage targets below minimum altitude', () => {
     const { world, grid } = createTestWorld();
-    const samSystem = new SamEngagementSystem(grid);
+    const radarSys = new RadarDetectionSystem(grid);
+    const samSystem = new SamEngagementSystem();
 
     // Create SAM site
     const samId = world.entities.allocate('SAM01');
@@ -911,9 +1096,10 @@ describe('SAM Altitude Floor', () => {
 
     grid.rebuild(world.position, world.entities.highWaterMark);
 
-    // Run enough ticks for stagger
+    // Run enough ticks for stagger (radar + SAM)
     for (let tick = 0; tick < 5; tick++) {
       world.tickCount = tick;
+      radarSys.update(world, 1.0);
       samSystem.update(world, 1.0);
     }
 
@@ -924,7 +1110,8 @@ describe('SAM Altitude Floor', () => {
 
   it('should engage targets above minimum altitude', () => {
     const { world, grid } = createTestWorld();
-    const samSystem = new SamEngagementSystem(grid);
+    const radarSys = new RadarDetectionSystem(grid);
+    const samSystem = new SamEngagementSystem();
 
     const samId = world.entities.allocate('SAM01');
     const samIdx = entityIndex(samId);
@@ -948,6 +1135,7 @@ describe('SAM Altitude Floor', () => {
 
     for (let tick = 0; tick < 5; tick++) {
       world.tickCount = tick;
+      radarSys.update(world, 1.0);
       samSystem.update(world, 1.0);
     }
 
@@ -969,7 +1157,7 @@ describe('SEAD Mission', () => {
     world.loadouts.set(idx, {
       primaryWeapon: 'AIM-120', primaryAmmo: 4, primaryMax: 4,
       secondaryWeapon: 'AIM-9', secondaryAmmo: 2, secondaryMax: 2,
-      externalFuelTanks: false, bayDoorsOpenUntil: 0, offloadableFuel: -1,
+      externalFuelTanks: false, bayDoorsOpenUntil: 0, offloadableFuel: -1, externalPods: [],
     });
 
     world.missions.set(idx, {
@@ -1006,7 +1194,7 @@ describe('SEAD Mission', () => {
     world.loadouts.set(idx, {
       primaryWeapon: 'AIM-120', primaryAmmo: 0, primaryMax: 4,
       secondaryWeapon: 'AIM-9', secondaryAmmo: 0, secondaryMax: 2,
-      externalFuelTanks: false, bayDoorsOpenUntil: 0, offloadableFuel: -1,
+      externalFuelTanks: false, bayDoorsOpenUntil: 0, offloadableFuel: -1, externalPods: [],
     });
 
     world.missions.set(idx, {
@@ -1064,7 +1252,7 @@ describe('Refueling Mission', () => {
       primaryWeapon: '', primaryAmmo: 0, primaryMax: 0,
       secondaryWeapon: '', secondaryAmmo: 0, secondaryMax: 0,
       externalFuelTanks: false, bayDoorsOpenUntil: 0,
-      offloadableFuel: 30000, // 30,000 kg offload pool
+      offloadableFuel: 30000, externalPods: [], // 30,000 kg offload pool
     });
     return idx;
   }
@@ -1312,5 +1500,263 @@ describe('Batch Radar Check (JS fallback)', () => {
 
     const n = batchRadarCheck(radarData, targetData, 0, 0, output);
     expect(n).toBe(0);
+  });
+});
+
+// ============================================================
+// SAM Radar-Gated Engagement Tests
+// ============================================================
+describe('SAM Radar-Gated Engagement', () => {
+  /** Helper: spawn a SAM site at given coords */
+  function spawnSAM(
+    world: World,
+    callsign: string,
+    lat: number,
+    lon: number,
+    side = Side.RED,
+  ) {
+    const id = world.entities.allocate(callsign);
+    const idx = entityIndex(id);
+    world.position.set(idx, { lat, lon, alt: 0, heading: 0, pitch: 0, roll: 0 });
+    world.allegiance.set(idx, { side, iffCode: 0 });
+    world.radar.set(idx, {
+      powerW: 10000,
+      gainDbi: 38,
+      freqGhz: 4.0,
+      mode: RadarMode.SEARCH,
+      maxRangeM: 300_000,
+    });
+    world.samStates.set(idx, {
+      weaponKey: 'SA-10',
+      missilesRemaining: 12,
+      maxMissiles: 12,
+      reloadTimer: 0,
+      reloadTimeSec: 5,
+      minEngageAltM: 30,
+      engagedTargets: new Set(),
+    });
+    world.renderable.set(idx, {
+      modelType: ModelType.SAM_SITE,
+      iconId: 0,
+      colorR: 1, colorG: 0.27, colorB: 0.27,
+      visible: 1,
+    });
+    return idx;
+  }
+
+  it('should fire at non-stealth target detected by radar', () => {
+    const { world, grid } = createTestWorld();
+    const radarSys = new RadarDetectionSystem(grid);
+    const samSys = new SamEngagementSystem();
+
+    const samIdx = spawnSAM(world, 'SA10-01', 26.0, 128.0);
+    // Place a non-stealth fighter at 50km north (well within 300km radar range)
+    const tgtIdx = spawnFighter(world, 'EAGLE01', 26.45, 128.0, 8000, Side.BLUE);
+
+    // Set tick so SAM's stagger fires (samIdx % 4 === tickCount % 4)
+    world.tickCount = samIdx;
+
+    grid.rebuild(world.position, world.entities.highWaterMark);
+    radarSys.update(world, 1.0);
+    samSys.update(world, 1.0);
+
+    const events = world.drainEvents();
+    const launchEvents = events.filter((e) => e.type === 'weapon:launched');
+    expect(launchEvents.length).toBe(1);
+    expect((launchEvents[0] as any).targetId).toBe(tgtIdx);
+  });
+
+  it('should NOT fire at stealth target beyond effective radar detection range', () => {
+    const { world, grid } = createTestWorld();
+    const radarSys = new RadarDetectionSystem(grid);
+    const samSys = new SamEngagementSystem();
+
+    const samIdx = spawnSAM(world, 'SA10-01', 26.0, 128.0);
+    // Place an F-22 (RCS 0.0001) at 200km — radar eq will yield very low detection probability
+    const tgtIdx = spawnFighter(world, 'RAPTOR01', 27.8, 128.0, 8000, Side.BLUE);
+    // Set RCS to stealth levels
+    world.aircraft.fields.get('rcs')![tgtIdx] = 0.0001;
+
+    world.tickCount = samIdx;
+
+    grid.rebuild(world.position, world.entities.highWaterMark);
+    radarSys.update(world, 1.0);
+
+    // Verify radar did NOT detect
+    expect(world.radarContacts.get(samIdx)?.length ?? 0).toBe(0);
+
+    samSys.update(world, 1.0);
+    const events = world.drainEvents();
+    const launchEvents = events.filter((e) => e.type === 'weapon:launched');
+    expect(launchEvents.length).toBe(0);
+  });
+
+  it('should respect altitude floor even if target is radar-detected', () => {
+    const { world, grid } = createTestWorld();
+    const radarSys = new RadarDetectionSystem(grid);
+    const samSys = new SamEngagementSystem();
+
+    const samIdx = spawnSAM(world, 'SA10-01', 26.0, 128.0);
+    // Place target very close but at very low altitude (below 30m minEngageAlt)
+    const tgtIdx = spawnFighter(world, 'EAGLE01', 26.1, 128.0, 20, Side.BLUE); // 20m alt
+
+    world.tickCount = samIdx;
+
+    grid.rebuild(world.position, world.entities.highWaterMark);
+    radarSys.update(world, 1.0);
+
+    // Radar should detect (close range, high RCS)
+    expect((world.radarContacts.get(samIdx)?.length ?? 0)).toBeGreaterThan(0);
+
+    samSys.update(world, 1.0);
+    const events = world.drainEvents();
+    const launchEvents = events.filter((e) => e.type === 'weapon:launched');
+    // Should NOT fire — target below altitude floor
+    expect(launchEvents.length).toBe(0);
+  });
+
+  it('should detect high-RCS and low-RCS aircraft in formation at different ranges', () => {
+    // Two aircraft flying in formation: F-15C (RCS 5.0) and F-22 (RCS 0.0001)
+    // At medium range, the SAM radar should detect the F-15 but NOT the F-22
+    const { world, grid } = createTestWorld();
+    const radarSys = new RadarDetectionSystem(grid);
+
+    const samIdx = spawnSAM(world, 'SA10-01', 26.0, 128.0);
+
+    // Place both aircraft at ~55km from SAM (Rmax for RCS 5.0 is ~87km, so well within range)
+    const f15Idx = spawnFighter(world, 'EAGLE01', 26.5, 128.0, 8000, Side.BLUE);
+    world.aircraft.fields.get('rcs')![f15Idx] = 5.0; // non-stealth
+
+    const f22Idx = spawnFighter(world, 'RAPTOR01', 26.5, 128.01, 8000, Side.BLUE);
+    world.aircraft.fields.get('rcs')![f22Idx] = 0.0001; // stealth (Rmax ~6km)
+
+    // Align tick with SAM entity index for stagger
+    world.tickCount = samIdx;
+
+    grid.rebuild(world.position, world.entities.highWaterMark);
+    radarSys.update(world, 1.0);
+
+    const contacts = world.radarContacts.get(samIdx) ?? [];
+
+    // F-15 should be detected (RCS 5.0 at ~55km, Rmax ~87km → high probability)
+    expect(contacts).toContain(f15Idx);
+
+    // F-22 should NOT be detected (RCS 0.0001 at ~55km, Rmax ~6km → zero probability)
+    expect(contacts).not.toContain(f22Idx);
+  });
+});
+
+// ============================================================
+// External Pods & RCS Tests
+// ============================================================
+describe('External Pods and RCS', () => {
+  it('should increase non-stealth RCS with pod contributions', () => {
+    // Non-stealth: base 5.0 + ECM pod 0.2 = 5.2
+    const rcs = computeEffectiveRCS(5.0, 0, false, false, false, 0.2);
+    expect(rcs).toBeCloseTo(5.2, 2);
+  });
+
+  it('should break stealth with pod RCS', () => {
+    // Stealth clean: 0.0001. With ECM pod (0.2): max(0.0001, 0.1) + 0.2 = 0.3
+    const clean = computeEffectiveRCS(0.0001, 0, false, false, true, 0);
+    const withPod = computeEffectiveRCS(0.0001, 0, false, false, true, 0.2);
+    expect(clean).toBe(0.0001);
+    expect(withPod).toBeCloseTo(0.3, 2);
+    expect(withPod).toBeGreaterThan(clean * 1000);
+  });
+
+  it('should stack multiple pod RCS contributions', () => {
+    // Two pods: ECM (0.2) + TGP (0.15) = 0.35 total pod RCS
+    const rcs = computeEffectiveRCS(5.0, 0, false, false, false, 0.35);
+    expect(rcs).toBeCloseTo(5.35, 2);
+  });
+
+  it('EQUIP command should add pod to loadout', () => {
+    const { world } = createTestWorld();
+    const idx = spawnFighter(world, 'EAGLE01', 26.0, 128.0);
+    world.loadouts.set(idx, {
+      primaryWeapon: 'AIM-120', primaryAmmo: 4, primaryMax: 4,
+      secondaryWeapon: 'AIM-9', secondaryAmmo: 4, secondaryMax: 4,
+      externalFuelTanks: false, bayDoorsOpenUntil: 0, offloadableFuel: -1,
+      externalPods: [],
+    });
+
+    const bus = new CommandBus();
+    bus.enqueue({ type: 'EQUIP', callsign: 'EAGLE01', podType: 'ECM' });
+    bus.processAll(world);
+
+    const loadout = world.loadouts.get(idx)!;
+    expect(loadout.externalPods).toContain('ECM');
+    expect(loadout.externalPods.length).toBe(1);
+  });
+
+  it('JETTISON command should remove pod from loadout', () => {
+    const { world } = createTestWorld();
+    const idx = spawnFighter(world, 'EAGLE01', 26.0, 128.0);
+    world.loadouts.set(idx, {
+      primaryWeapon: 'AIM-120', primaryAmmo: 4, primaryMax: 4,
+      secondaryWeapon: 'AIM-9', secondaryAmmo: 4, secondaryMax: 4,
+      externalFuelTanks: false, bayDoorsOpenUntil: 0, offloadableFuel: -1,
+      externalPods: ['ECM', 'TGP'],
+    });
+
+    const bus = new CommandBus();
+    bus.enqueue({ type: 'JETTISON', callsign: 'EAGLE01', podType: 'ECM' });
+    bus.processAll(world);
+
+    const loadout = world.loadouts.get(idx)!;
+    expect(loadout.externalPods).not.toContain('ECM');
+    expect(loadout.externalPods).toContain('TGP');
+    expect(loadout.externalPods.length).toBe(1);
+  });
+
+  it('EQUIP with invalid pod type should emit error', () => {
+    const { world } = createTestWorld();
+    spawnFighter(world, 'EAGLE01', 26.0, 128.0);
+    world.loadouts.set(entityIndex(world.entities.callsignMap.get('EAGLE01')!), {
+      primaryWeapon: 'AIM-120', primaryAmmo: 4, primaryMax: 4,
+      secondaryWeapon: 'AIM-9', secondaryAmmo: 4, secondaryMax: 4,
+      externalFuelTanks: false, bayDoorsOpenUntil: 0, offloadableFuel: -1,
+      externalPods: [],
+    });
+
+    const bus = new CommandBus();
+    bus.enqueue({ type: 'EQUIP', callsign: 'EAGLE01', podType: 'INVALID' });
+    bus.processAll(world);
+
+    const events = world.drainEvents();
+    const errors = events.filter((e) => e.type === 'command:error');
+    expect(errors.length).toBe(1);
+    expect((errors[0] as any).error).toContain('Unknown pod type');
+  });
+});
+
+// ============================================================
+// Parser: EQUIP & JETTISON Tests
+// ============================================================
+describe('Parser: EQUIP & JETTISON Commands', () => {
+  it('should parse EQUIP command', async () => {
+    const { parseCommand } = await import('@jzsim/command-parser');
+    const cmd = parseCommand('EQUIP EAGLE01 ECM');
+    expect(cmd).not.toBeNull();
+    expect(cmd!.type).toBe('EQUIP');
+    expect((cmd as any).callsign).toBe('EAGLE01');
+    expect((cmd as any).podType).toBe('ECM');
+  });
+
+  it('should parse JETTISON command', async () => {
+    const { parseCommand } = await import('@jzsim/command-parser');
+    const cmd = parseCommand('JETTISON RAPTOR01 TGP');
+    expect(cmd).not.toBeNull();
+    expect(cmd!.type).toBe('JETTISON');
+    expect((cmd as any).callsign).toBe('RAPTOR01');
+    expect((cmd as any).podType).toBe('TGP');
+  });
+
+  it('should include EQUIP and JETTISON in command keywords', async () => {
+    const { getCommandKeywords } = await import('@jzsim/command-parser');
+    const keywords = getCommandKeywords();
+    expect(keywords).toContain('EQUIP');
+    expect(keywords).toContain('JETTISON');
   });
 });

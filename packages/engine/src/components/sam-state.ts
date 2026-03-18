@@ -30,4 +30,8 @@ export class SamStateStore {
   entries(): IterableIterator<[number, SamStateData]> {
     return this.data.entries();
   }
+
+  clear(): void {
+    this.data.clear();
+  }
 }

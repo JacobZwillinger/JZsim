@@ -20,12 +20,25 @@ import { handleArm } from './handlers/arm.js';
 import { handleSetDefaults } from './handlers/set-defaults.js';
 import { handleSead } from './handlers/sead.js';
 import { handleRefuel } from './handlers/refuel.js';
+import { handleEquip } from './handlers/equip.js';
+import { handleJettison } from './handlers/jettison.js';
+import { handleDmpiAdd } from './handlers/dmpi-add.js';
+import { handleDmpiRemove } from './handlers/dmpi-remove.js';
+import { handleStrike } from './handlers/strike.js';
 
 export class CommandBus {
   private queue: Command[] = [];
 
   enqueue(command: Command): void {
     this.queue.push(command);
+  }
+
+  clear(): void {
+    this.queue.length = 0;
+  }
+
+  hasPending(): boolean {
+    return this.queue.length > 0;
   }
 
   processAll(world: World): void {
@@ -65,6 +78,11 @@ export class CommandBus {
       case 'SET_DEFAULTS': handleSetDefaults(cmd, world); break;
       case 'SEAD':         handleSead(cmd, world); break;
       case 'REFUEL':       handleRefuel(cmd, world); break;
+      case 'EQUIP':        handleEquip(cmd, world); break;
+      case 'JETTISON':     handleJettison(cmd, world); break;
+      case 'DMPI_ADD':     handleDmpiAdd(cmd, world); break;
+      case 'DMPI_REMOVE':  handleDmpiRemove(cmd, world); break;
+      case 'STRIKE':       handleStrike(cmd, world); break;
       default:
         world.emit({
           type: 'command:error',

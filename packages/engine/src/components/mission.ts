@@ -9,6 +9,7 @@ export enum MissionState {
   LANDED = 'LANDED',
   INTERCEPT = 'INTERCEPT',
   SEAD = 'SEAD',
+  STRIKE = 'STRIKE',
   REFUELING = 'REFUELING',
 }
 
@@ -74,5 +75,9 @@ export class MissionStore {
 
   entries(): IterableIterator<[number, MissionData]> {
     return this.data.entries();
+  }
+
+  clear(): void {
+    this.data.clear();
   }
 }

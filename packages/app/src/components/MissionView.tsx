@@ -3,7 +3,7 @@ import { useUIStore, type EntityInfo } from '../store/ui-store.js';
 import { PANEL } from '../styles/panel.js';
 import { ModelType } from '@jzsim/core';
 
-const AIR_STATES = new Set(['PATROL', 'ENROUTE', 'INTERCEPT', 'LOITER']);
+const AIR_STATES = new Set(['PATROL', 'ENROUTE', 'INTERCEPT', 'LOITER', 'STRIKE', 'SEAD']);
 const GROUND_STATES = new Set(['LANDED', 'IDLE']);
 
 interface GroupedMissions {

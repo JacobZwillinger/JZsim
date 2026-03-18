@@ -50,6 +50,8 @@ export function MapView() {
   const missionStates = useUIStore((s) => s.missionStates);
   const radarEntities = useUIStore((s) => s.radarEntities);
   const radarDetections = useUIStore((s) => s.radarDetections);
+  const dmpiTargets = useUIStore((s) => s.dmpiTargets);
+  const strikeRoutes = useUIStore((s) => s.strikeRoutes);
   const setSelectedEntityId = useUIStore((s) => s.setSelectedEntityId);
 
   // Track zoom level for label visibility
@@ -166,6 +168,56 @@ export function MapView() {
         },
       });
 
+      // --- DMPI markers ---
+      map.addSource('dmpi-markers', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+      map.addLayer({
+        id: 'dmpi-markers-circle',
+        type: 'circle',
+        source: 'dmpi-markers',
+        paint: {
+          'circle-radius': 6,
+          'circle-color': '#ff8800',
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 1,
+        },
+      });
+      map.addLayer({
+        id: 'dmpi-markers-label',
+        type: 'symbol',
+        source: 'dmpi-markers',
+        layout: {
+          'text-field': ['get', 'name'],
+          'text-size': 10,
+          'text-offset': [0, 1.5],
+          'text-anchor': 'top',
+        },
+        paint: {
+          'text-color': '#ff8800',
+          'text-halo-color': '#000000',
+          'text-halo-width': 1,
+        },
+      });
+
+      // --- Strike route lines ---
+      map.addSource('strike-routes', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: [] },
+      });
+      map.addLayer({
+        id: 'strike-routes-line',
+        type: 'line',
+        source: 'strike-routes',
+        paint: {
+          'line-color': '#ff8800',
+          'line-opacity': 0.7,
+          'line-width': 2,
+          'line-dasharray': [4, 2],
+        },
+      });
+
       mapReadyRef.current = true;
     });
 
@@ -227,6 +279,47 @@ export function MapView() {
     }
     src.setData({ type: 'FeatureCollection', features });
   }, [radarDetections, radarEntities, entities]);
+
+  // Update DMPI markers and strike route lines
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReadyRef.current) return;
+
+    // DMPI markers
+    const markerSrc = map.getSource('dmpi-markers') as maplibregl.GeoJSONSource | undefined;
+    if (markerSrc) {
+      const markerFeatures: GeoJSON.Feature[] = [];
+      for (const [name, data] of dmpiTargets) {
+        markerFeatures.push({
+          type: 'Feature',
+          properties: { name, description: data.description ?? '' },
+          geometry: { type: 'Point', coordinates: [data.lon, data.lat] },
+        });
+      }
+      markerSrc.setData({ type: 'FeatureCollection', features: markerFeatures });
+    }
+
+    // Strike route lines
+    const routeSrc = map.getSource('strike-routes') as maplibregl.GeoJSONSource | undefined;
+    if (routeSrc) {
+      const routeFeatures: GeoJSON.Feature[] = [];
+      for (const [, route] of strikeRoutes) {
+        const coords: [number, number][] = [];
+        for (const dmpiName of route.dmpiNames) {
+          const t = dmpiTargets.get(dmpiName);
+          if (t) coords.push([t.lon, t.lat]);
+        }
+        if (coords.length >= 2) {
+          routeFeatures.push({
+            type: 'Feature',
+            properties: {},
+            geometry: { type: 'LineString', coordinates: coords },
+          });
+        }
+      }
+      routeSrc.setData({ type: 'FeatureCollection', features: routeFeatures });
+    }
+  }, [dmpiTargets, strikeRoutes]);
 
   // Update entity markers every render frame (entities updates at 60Hz from SAB)
   useEffect(() => {

@@ -1,6 +1,7 @@
 import {
   radarMaxRange, detectionProbability, radarHorizon, approxDistance,
   computeEffectiveRCS, RadarMode, METERS_PER_DEGREE_LAT,
+  POD_DEFAULTS,
 } from '@jzsim/core';
 import { batchRadarCheck } from '@jzsim/wasm-radar';
 import type { System } from './types.js';
@@ -39,6 +40,7 @@ export class RadarDetectionSystem implements System {
   constructor(private readonly spatialGrid: SpatialGrid) {}
 
   update(world: World, dt: number): void {
+    world.radarContacts.clear();
     const tick = world.tickCount;
     const hwm = world.entities.highWaterMark;
 
@@ -142,7 +144,10 @@ export class RadarDetectionSystem implements System {
       const externalStores = loadout ? (loadout.primaryAmmo + loadout.secondaryAmmo) : 0;
       const hasExtTanks = loadout ? loadout.externalFuelTanks : false;
       const bayOpen = loadout ? world.simTime < loadout.bayDoorsOpenUntil : false;
-      this.targetBuf[off + 3] = computeEffectiveRCS(baseRcs, externalStores, hasExtTanks, bayOpen, isStealth);
+      const podsRcs = loadout?.externalPods
+        ? loadout.externalPods.reduce((sum, p) => sum + (POD_DEFAULTS[p]?.rcsM2 ?? 0), 0)
+        : 0;
+      this.targetBuf[off + 3] = computeEffectiveRCS(baseRcs, externalStores, hasExtTanks, bayOpen, isStealth, podsRcs);
     }
 
     // Run batch check
@@ -172,6 +177,14 @@ export class RadarDetectionSystem implements System {
           range: dist,
           probability: prob,
         });
+
+        // Store contact for engagement systems
+        let contacts = world.radarContacts.get(radarIdx);
+        if (!contacts) {
+          contacts = [];
+          world.radarContacts.set(radarIdx, contacts);
+        }
+        contacts.push(targetIdx);
       }
     }
   }
@@ -215,7 +228,10 @@ export class RadarDetectionSystem implements System {
         : 0;
       const hasExtTanks = loadout ? loadout.externalFuelTanks : false;
       const bayOpen = loadout ? world.simTime < loadout.bayDoorsOpenUntil : false;
-      const rcs = computeEffectiveRCS(baseRcs, externalStores, hasExtTanks, bayOpen, isStealth);
+      const podsRcs = loadout?.externalPods
+        ? loadout.externalPods.reduce((sum, p) => sum + (POD_DEFAULTS[p]?.rcsM2 ?? 0), 0)
+        : 0;
+      const rcs = computeEffectiveRCS(baseRcs, externalStores, hasExtTanks, bayOpen, isStealth, podsRcs);
       const rmax = radarMaxRange(powerW, gainDbi, freqGhz, rcs);
       const pDetect = detectionProbability(dist, rmax);
 
@@ -227,6 +243,14 @@ export class RadarDetectionSystem implements System {
           range: dist,
           probability: pDetect,
         });
+
+        // Store contact for engagement systems
+        let contacts = world.radarContacts.get(radarIdx);
+        if (!contacts) {
+          contacts = [];
+          world.radarContacts.set(radarIdx, contacts);
+        }
+        contacts.push(targetIdx);
       }
     }
   }

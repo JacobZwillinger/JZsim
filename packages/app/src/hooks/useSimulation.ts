@@ -36,10 +36,19 @@ export function useSimulation() {
         case 'events':
           addEvents(msg.events as SimEvent[]);
           break;
-        case 'tick_stats':
+        case 'tick_stats': {
           // Only update tickMs from postMessage; other stats come from SharedArrayBuffer
-          setSimStats(msg.simTime, msg.tickCount, msg.entityCount, msg.tickMs);
+          const perf = msg.systemTimings ? {
+            systemTimings: msg.systemTimings as { name: string; ms: number }[],
+            gridRebuildMs: (msg as any).gridRebuildMs ?? 0,
+            bufferSyncMs: (msg as any).bufferSyncMs ?? 0,
+            radarContacts: (msg as any).radarContacts ?? 0,
+            missileCount: (msg as any).missileCount ?? 0,
+            worldCapacity: (msg as any).worldCapacity ?? 0,
+          } : undefined;
+          setSimStats(msg.simTime, msg.tickCount, msg.entityCount, msg.tickMs, perf);
           break;
+        }
         case 'aar_update':
           setAARData(msg.data as any);
           break;
@@ -108,5 +117,10 @@ export function useSimulation() {
     useUIStore.getState().setTimeMultiplier(multiplier);
   }, []);
 
-  return { sendCommand, setPaused, setTimeMultiplier };
+  const resetSim = useCallback(() => {
+    workerRef.current?.postMessage({ type: 'reset' } satisfies WorkerMessage);
+    useUIStore.getState().resetSimState();
+  }, []);
+
+  return { sendCommand, setPaused, setTimeMultiplier, resetSim };
 }
