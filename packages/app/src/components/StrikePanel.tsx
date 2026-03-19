@@ -4,6 +4,12 @@ import { PANEL } from '../styles/panel.js';
 import { haversineDistance } from '@jzsim/core';
 import type { Command } from '@jzsim/core';
 
+// Must match STRIKE_COLORS in MapView.tsx
+const STRIKE_COLORS = [
+  '#ff8800', '#00ccff', '#ff44aa', '#88ff44',
+  '#ffdd00', '#aa66ff', '#ff6644', '#44ffcc',
+];
+
 interface Props {
   onCommand: (cmd: Command) => void;
 }
@@ -70,9 +76,10 @@ export function StrikePanel({ onCommand }: Props) {
             No active strike missions.
           </div>
         ) : (
-          Array.from(strikeRoutes.entries()).map(([entityId, route]) => {
+          Array.from(strikeRoutes.entries()).map(([entityId, route], idx) => {
             const cs = callsigns.get(entityId) ?? `#${entityId}`;
             const isExpanded = expandedStrike === entityId;
+            const routeColor = STRIKE_COLORS[idx % STRIKE_COLORS.length];
             return (
               <div key={entityId} style={{ marginBottom: '4px' }}>
                 <div
@@ -81,6 +88,7 @@ export function StrikePanel({ onCommand }: Props) {
                     padding: '6px 8px',
                     backgroundColor: isExpanded ? 'rgba(68,136,255,0.08)' : 'rgba(255,255,255,0.02)',
                     border: `1px solid ${isExpanded ? PANEL.ACCENT_DIM : PANEL.BORDER}`,
+                    borderLeft: `3px solid ${routeColor}`,
                     borderRadius: '4px', cursor: 'pointer',
                   }}
                   onClick={() => setExpandedStrike(isExpanded ? null : entityId)}
@@ -88,8 +96,8 @@ export function StrikePanel({ onCommand }: Props) {
                   <div>
                     <span style={{ fontSize: '11px', color: PANEL.TEXT_PRIMARY, fontWeight: 'bold' }}>{cs}</span>
                     <span style={{
-                      fontSize: '8px', color: PANEL.WARNING, marginLeft: '6px',
-                      padding: '1px 4px', backgroundColor: 'rgba(255,170,51,0.15)',
+                      fontSize: '8px', color: routeColor, marginLeft: '6px',
+                      padding: '1px 4px', backgroundColor: `${routeColor}22`,
                       borderRadius: '2px',
                     }}>STK</span>
                   </div>
@@ -104,6 +112,7 @@ export function StrikePanel({ onCommand }: Props) {
                     callsign={cs}
                     dmpiTargets={dmpiTargets}
                     onCommand={onCommand}
+                    color={routeColor}
                   />
                 )}
               </div>
@@ -237,12 +246,13 @@ function sortPending(
   }
 }
 
-function StrikeRouteDetail({ entityId, route, callsign, dmpiTargets, onCommand }: {
+function StrikeRouteDetail({ entityId, route, callsign, dmpiTargets, onCommand, color }: {
   entityId: number;
   route: { dmpiNames: string[]; currentDmpiIdx: number; completedDmpis: string[] };
   callsign: string;
   dmpiTargets: Map<string, { lat: number; lon: number; description?: string }>;
   onCommand: (cmd: Command) => void;
+  color: string;
 }) {
   const [strategy, setStrategy] = useState<SortStrategy>('nearest');
 
@@ -300,7 +310,7 @@ function StrikeRouteDetail({ entityId, route, callsign, dmpiTargets, onCommand }
     <div style={{
       padding: '8px',
       backgroundColor: 'rgba(0,0,0,0.2)',
-      borderLeft: `2px solid ${PANEL.WARNING}`,
+      borderLeft: `3px solid ${color}`,
       borderRadius: '0 0 4px 4px',
       marginTop: '-1px',
     }}>

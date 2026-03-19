@@ -13,6 +13,18 @@ function getSideColor(side: number): string {
   }
 }
 
+// Distinct colors for up to 8 strike routes
+const STRIKE_COLORS = [
+  '#ff8800', // orange
+  '#00ccff', // cyan
+  '#ff44aa', // pink
+  '#88ff44', // lime
+  '#ffdd00', // yellow
+  '#aa66ff', // purple
+  '#ff6644', // red-orange
+  '#44ffcc', // teal
+];
+
 function isStaticEntity(modelType: number): boolean {
   return modelType >= 10 && modelType !== ModelType.MISSILE;
 }
@@ -179,7 +191,7 @@ export function MapView() {
         source: 'dmpi-markers',
         paint: {
           'circle-radius': 6,
-          'circle-color': '#ff8800',
+          'circle-color': ['get', 'color'],
           'circle-stroke-color': '#ffffff',
           'circle-stroke-width': 1,
         },
@@ -195,7 +207,7 @@ export function MapView() {
           'text-anchor': 'top',
         },
         paint: {
-          'text-color': '#ff8800',
+          'text-color': ['get', 'color'],
           'text-halo-color': '#000000',
           'text-halo-width': 1,
         },
@@ -211,7 +223,7 @@ export function MapView() {
         type: 'line',
         source: 'strike-routes',
         paint: {
-          'line-color': '#ff8800',
+          'line-color': ['get', 'color'],
           'line-opacity': 0.7,
           'line-width': 2,
           'line-dasharray': [4, 2],
@@ -285,6 +297,17 @@ export function MapView() {
     const map = mapRef.current;
     if (!map || !mapReadyRef.current) return;
 
+    // Build DMPI → color mapping from strike routes
+    const dmpiColorMap = new Map<string, string>();
+    let routeIdx = 0;
+    for (const [, route] of strikeRoutes) {
+      const color = STRIKE_COLORS[routeIdx % STRIKE_COLORS.length];
+      for (const dmpiName of route.dmpiNames) {
+        dmpiColorMap.set(dmpiName, color);
+      }
+      routeIdx++;
+    }
+
     // DMPI markers
     const markerSrc = map.getSource('dmpi-markers') as maplibregl.GeoJSONSource | undefined;
     if (markerSrc) {
@@ -292,7 +315,11 @@ export function MapView() {
       for (const [name, data] of dmpiTargets) {
         markerFeatures.push({
           type: 'Feature',
-          properties: { name, description: data.description ?? '' },
+          properties: {
+            name,
+            description: data.description ?? '',
+            color: dmpiColorMap.get(name) ?? '#ff8800',
+          },
           geometry: { type: 'Point', coordinates: [data.lon, data.lat] },
         });
       }
@@ -303,7 +330,9 @@ export function MapView() {
     const routeSrc = map.getSource('strike-routes') as maplibregl.GeoJSONSource | undefined;
     if (routeSrc) {
       const routeFeatures: GeoJSON.Feature[] = [];
+      let lineIdx = 0;
       for (const [, route] of strikeRoutes) {
+        const color = STRIKE_COLORS[lineIdx % STRIKE_COLORS.length];
         const coords: [number, number][] = [];
         for (const dmpiName of route.dmpiNames) {
           const t = dmpiTargets.get(dmpiName);
@@ -312,10 +341,11 @@ export function MapView() {
         if (coords.length >= 2) {
           routeFeatures.push({
             type: 'Feature',
-            properties: {},
+            properties: { color },
             geometry: { type: 'LineString', coordinates: coords },
           });
         }
+        lineIdx++;
       }
       routeSrc.setData({ type: 'FeatureCollection', features: routeFeatures });
     }
